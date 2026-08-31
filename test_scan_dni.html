@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Test escaneo DNI — Zebra Club</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, system-ui, sans-serif;
+    background: #f0f2f0;
+    color: #1a1a1a;
+    padding: 16px;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.sub { color: #666; font-size: 13px; margin: 0 0 16px; }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+  video {
+    width: 100%;
+    border-radius: 10px;
+    background: #000;
+    display: block;
+  }
+  .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  button {
+    flex: 1;
+    min-width: 120px;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-primary { background: #3a9e5f; color: #fff; }
+  .btn-secondary { background: #e4e6e4; color: #333; }
+  .btn-primary:disabled { background: #a8d4b8; }
+  .status {
+    font-size: 13px;
+    color: #888;
+    margin-top: 8px;
+    min-height: 18px;
+  }
+  .status.err { color: #c0392b; }
+  .status.ok { color: #3a9e5f; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td { padding: 6px 4px; border-bottom: 1px solid #eee; }
+  td.label { color: #888; width: 40%; }
+  td.value { font-weight: 600; }
+  .raw {
+    font-family: monospace;
+    font-size: 11px;
+    color: #999;
+    word-break: break-all;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed #ddd;
+  }
+  .edad-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 700;
+    margin-left: 6px;
+  }
+  .edad-ok { background: #dcf5e3; color: #2b7a43; }
+  .edad-no { background: #fbe0dc; color: #c0392b; }
+</style>
+</head>
+<body>
+
+<h1>🦓 Test de escaneo de DNI</h1>
+<p class="sub">Prototipo — probar con un DNI real en mano, de noche y de día, antes de construir el resto del sistema.</p>
+
+<div class="card">
+  <video id="video" muted playsinline></video>
+  <div class="row">
+    <button id="btnStart" class="btn-primary">Iniciar cámara</button>
+    <button id="btnTorch" class="btn-secondary" style="display:none;">🔦 Linterna</button>
+  </div>
+  <div id="status" class="status">Tocá "Iniciar cámara" y apuntá al código de barras de atrás del DNI.</div>
+</div>
+
+<div class="card" id="resultCard" style="display:none;">
+  <table>
+    <tr><td class="label">Apellido</td><td class="value" id="fApellido">—</td></tr>
+    <tr><td class="label">Nombre</td><td class="value" id="fNombre">—</td></tr>
+    <tr><td class="label">DNI</td><td class="value" id="fDni">—</td></tr>
+    <tr><td class="label">Sexo</td><td class="value" id="fSexo">—</td></tr>
+    <tr><td class="label">Fecha nac.</td><td class="value" id="fFechaNac">—</td></tr>
+    <tr><td class="label">Edad</td><td class="value" id="fEdad">—</td></tr>
+  </table>
+  <div class="raw" id="raw"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
+<script>
+const { BrowserMultiFormatReader, BarcodeFormat, DecodeHintType } = ZXing;
+
+const video = document.getElementById('video');
+const statusEl = document.getElementById('status');
+const btnStart = document.getElementById('btnStart');
+const btnTorch = document.getElementById('btnTorch');
+const resultCard = document.getElementById('resultCard');
+
+let reader = null;
+let currentStream = null;
+let torchOn = false;
+
+const hints = new Map();
+hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.PDF_417]);
+reader = new BrowserMultiFormatReader(hints);
+
+function setStatus(msg, cls) {
+  statusEl.textContent = msg;
+  statusEl.className = 'status' + (cls ? ' ' + cls : '');
+}
+
+function parseDniPdf417(raw) {
+  // Formato conocido (a confirmar con DNI real): separado por '@'
+  // 1 tramite | 2 apellidos | 3 nombres | 4 sexo | 5 dni | 6 ejemplar | 7 fecha nac | 8 fecha emision | 9 cuil parcial
+  const parts = raw.split('@');
+  return {
+    tramite: parts[0] || '',
+    apellido: parts[1] || '',
+    nombre: parts[2] || '',
+    sexo: parts[3] || '',
+    dni: parts[4] || '',
+    ejemplar: parts[5] || '',
+    fechaNacimiento: parts[6] || '',
+    fechaEmision: parts[7] || '',
+    cuilParcial: parts[8] || '',
+    raw
+  };
+}
+
+function calcularEdad(fechaDDMMYYYY) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec((fechaDDMMYYYY || '').trim());
+  if (!m) return null;
+  const [_, dd, mm, yyyy] = m;
+  const nacimiento = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+  if (isNaN(nacimiento.getTime())) return null;
+  const hoy = new Date();
+  let edad = hoy.getFullYear() - nacimiento.getFullYear();
+  const noCumplioAun =
+    hoy.getMonth() < nacimiento.getMonth() ||
+    (hoy.getMonth() === nacimiento.getMonth() && hoy.getDate() < nacimiento.getDate());
+  if (noCumplioAun) edad--;
+  return edad;
+}
+
+function mostrarResultado(data) {
+  resultCard.style.display = 'block';
+  document.getElementById('fApellido').textContent = data.apellido || '—';
+  document.getElementById('fNombre').textContent = data.nombre || '—';
+  document.getElementById('fDni').textContent = data.dni || '—';
+  document.getElementById('fSexo').textContent = data.sexo || '—';
+  document.getElementById('fFechaNac').textContent = data.fechaNacimiento || '—';
+
+  const edad = calcularEdad(data.fechaNacimiento);
+  const edadEl = document.getElementById('fEdad');
+  if (edad === null) {
+    edadEl.innerHTML = 'No se pudo calcular';
+  } else {
+    const badgeClass = edad >= 20 ? 'edad-ok' : 'edad-no';
+    edadEl.innerHTML = `${edad} años <span class="edad-badge ${badgeClass}">${edad >= 20 ? 'OK +20' : 'MENOR A 20'}</span>`;
+  }
+
+  document.getElementById('raw').textContent = 'RAW: ' + data.raw;
+}
+
+async function iniciar() {
+  btnStart.disabled = true;
+  setStatus('Pidiendo acceso a la cámara...');
+  try {
+    await reader.decodeFromConstraints(
+      {
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      },
+      video,
+      (result, err) => {
+        if (result) {
+          setStatus('¡Código leído!', 'ok');
+          const parsed = parseDniPdf417(result.getText());
+          mostrarResultado(parsed);
+        }
+        // errores de "no encontrado en este frame" son normales, se ignoran
+      }
+    );
+    setStatus('Cámara activa. Apuntá al código de barras de atrás del DNI, bien enfocado y derecho.');
+    currentStream = video.srcObject;
+    activarBotonLinterna();
+  } catch (e) {
+    setStatus('Error al acceder a la cámara: ' + e.message, 'err');
+    btnStart.disabled = false;
+  }
+}
+
+function activarBotonLinterna() {
+  if (!currentStream) return;
+  const track = currentStream.getVideoTracks()[0];
+  const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+  if (capabilities.torch) {
+    btnTorch.style.display = 'block';
+    btnTorch.onclick = async () => {
+      torchOn = !torchOn;
+      try {
+        await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+        btnTorch.textContent = torchOn ? '🔦 Apagar linterna' : '🔦 Linterna';
+      } catch (e) {
+        setStatus('Este celular no permite prender la linterna desde el navegador.', 'err');
+      }
+    };
+  }
+}
+
+btnStart.addEventListener('click', iniciar);
+</script>
+</body>
+</html>
