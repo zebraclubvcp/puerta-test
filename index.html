@@ -125,8 +125,10 @@
     padding: 8px 0;
     cursor: pointer;
   }
+  .grupo-right { display: flex; align-items: center; gap: 4px; }
   .grupo-count { font-size: 12px; color: #9a94a8; white-space: nowrap; }
   .grupo-count .chevron { margin-left: 4px; color: #6f6884; }
+  .grupo-del-btn { font-size: 15px !important; }
   .grupo-items { padding-bottom: 6px; }
   .x-btn { background: none; border: none; color: #ff6b81; font-size: 16px; padding: 0 6px; cursor: pointer; }
   .resumen-row {
@@ -267,7 +269,7 @@ María López
 <!-- ZXing para escaneo de DNI (PDF417) -->
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
 <!-- pdf.js para importar listas desde PDF -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <script>
 /* ---------- Firebase init ---------- */
@@ -282,7 +284,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 if (window.pdfjsLib) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js';
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
 
 /* ---------- Estado global ---------- */
@@ -550,7 +552,10 @@ function renderPendientes() {
     html += `<div class="responsable-group">
       <div class="grupo-header" data-key="${escapeAttr(key)}">
         <h3>${escapeHtml(responsable)} <span class="tag ${tipo === 'rrpp' ? 'tag-rrpp' : 'tag-dueno'}">${tipo === 'rrpp' ? 'RRPP' : 'DUEÑO'}</span></h3>
-        <span class="grupo-count">${items.length} ${items.length === 1 ? 'persona' : 'personas'}<span class="chevron">${abierto ? '▲' : '▼'}</span></span>
+        <span class="grupo-right">
+          <span class="grupo-count">${items.length} ${items.length === 1 ? 'persona' : 'personas'}<span class="chevron">${abierto ? '▲' : '▼'}</span></span>
+          <button class="x-btn grupo-del-btn" data-key="${escapeAttr(key)}" title="Borrar toda esta lista">🗑</button>
+        </span>
       </div>`;
     if (abierto) {
       html += '<div class="grupo-items">';
@@ -569,10 +574,26 @@ function renderPendientes() {
       renderPendientes();
     });
   });
-  cont.querySelectorAll('.x-btn').forEach(btn => {
+  cont.querySelectorAll('.x-btn[data-id]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       db.collection('invitados').doc(btn.dataset.id).delete();
+    });
+  });
+  cont.querySelectorAll('.grupo-del-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const key = btn.dataset.key;
+      const [responsable, tipo] = key.split('||');
+      const items = invitados.filter(i => i.estado === 'pendiente' && i.responsable === responsable && i.tipo === tipo);
+      if (!items.length) return;
+      const ok = confirm('¿Borrar toda la lista de ' + responsable + ' (' + items.length + (items.length === 1 ? ' persona' : ' personas') + ')? No se puede deshacer.');
+      if (!ok) return;
+      const batch = db.batch();
+      items.forEach(i => batch.delete(db.collection('invitados').doc(i.id)));
+      batch.commit()
+        .then(() => showToast('Lista de ' + responsable + ' borrada.'))
+        .catch(e => showToast('Error: ' + e.message));
     });
   });
 }
@@ -621,16 +642,16 @@ function renderResumen() {
 
 /* ---------- Exportar / compartir resumen ---------- */
 function generarTextoResumen() {
+  // para el texto compartido no importa si la lista era RRPP o dueño/encargado,
+  // solo nombre y cantidad total ingresada por esa persona
   const ingresados = invitados.filter(i => i.estado === 'ingresado');
   const counts = {};
   ingresados.forEach(i => {
-    const key = i.responsable + '||' + i.tipo;
-    counts[key] = (counts[key] || 0) + 1;
+    counts[i.responsable] = (counts[i.responsable] || 0) + 1;
   });
-  const rows = Object.keys(counts).map(key => {
-    const [responsable, tipo] = key.split('||');
-    return { responsable, tipo, count: counts[key] };
-  }).sort((a, b) => b.count - a.count);
+  const rows = Object.keys(counts)
+    .map(responsable => ({ responsable, count: counts[responsable] }))
+    .sort((a, b) => b.count - a.count);
 
   let txt = '🦓 Zebra Club';
   if (evento.nombreEvento) txt += ' — ' + evento.nombreEvento;
@@ -641,7 +662,7 @@ function generarTextoResumen() {
     txt += '(todavía no hay ingresos)\n';
   } else {
     rows.forEach(r => {
-      txt += r.responsable + ' (' + (r.tipo === 'rrpp' ? 'RRPP' : 'Dueño/Encargado') + '): ' + r.count + '\n';
+      txt += r.responsable + ': ' + r.count + '\n';
     });
   }
   txt += '\nTOTAL: ' + ingresados.length;
