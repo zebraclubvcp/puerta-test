@@ -2,8 +2,16 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Zebra Club — Control de Puerta</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a0810">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Zebra Puerta">
+<meta name="mobile-web-app-capable" content="yes">
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
@@ -177,6 +185,8 @@
   .grupo-count svg { width: 13px; height: 13px; }
   .grupo-del-btn { background: none; border: none; color: #ff8a8f; padding: 4px; cursor: pointer; }
   .grupo-del-btn svg { width: 15px; height: 15px; }
+  .grupo-add-btn { background: none; border: none; color: #a374fb; padding: 4px; cursor: pointer; }
+  .grupo-add-btn svg { width: 16px; height: 16px; }
   .grupo-items { padding-bottom: 6px; }
   .x-btn { background: none; border: none; color: #ff8a8f; padding: 0 4px; cursor: pointer; }
   .x-btn svg { width: 15px; height: 15px; }
@@ -215,16 +225,78 @@
     box-shadow: 0 8px 24px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.15);
   }
   .toast.show { opacity: 1; }
+
+  /* ---------- Login por PIN ---------- */
+  .login-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+    background: #0a0810; padding: 20px;
+  }
+  .login-box {
+    width: 100%; max-width: 320px; text-align: center;
+    background: linear-gradient(180deg, rgba(255,255,255,.075), rgba(255,255,255,.03));
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    border-radius: 24px; padding: 30px 22px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.3), inset 0 0 0 1px rgba(255,255,255,.06);
+  }
+  .login-box h1 {
+    font-size: 24px; margin: 0 0 4px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+    background: linear-gradient(90deg,#fff,#cbb9fb); -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .login-sub { font-size: 12.5px; color: #9a8fc0; margin-bottom: 22px; }
+  .login-pin-input {
+    width: 100%; text-align: center; font-size: 30px; letter-spacing: 14px; font-weight: 700;
+    padding: 14px 10px 14px 24px; border-radius: 14px;
+    border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.06); color: #f4f2f9;
+  }
+
+  /* ---------- Header: usuario logueado + cerrar sesión ---------- */
+  .header-top { display: flex; align-items: center; justify-content: center; position: relative; }
+  .logout-btn {
+    position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+    background: rgba(255,255,255,.08); color: #cfc7e6; width: 34px; height: 34px; padding: 0; border-radius: 12px;
+  }
+  .logout-btn svg { width: 16px; height: 16px; margin: 0; }
+  .user-info { font-size: 10.5px; color: #756e89; margin-top: 3px; }
+
+  /* ---------- Pestaña Usuarios ---------- */
+  .usuario-row {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; row-gap: 8px; column-gap: 8px;
+    padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 13px;
+  }
+  .usuario-row:last-child { border-bottom: none; }
+  .usuario-row .u-nombre { font-weight: 700; }
+  .usuario-row .u-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+  .usuario-row .u-pin { font-family: monospace; letter-spacing: 2px; color: #a78bfa; font-weight: 700; }
+  .usuario-row.inactivo { opacity: .45; }
+  .tag-admin { background: #3a2a12; color: #f5c86a; }
+  .auditoria-row { font-size: 12px; color: #cfc7e6; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+  .auditoria-row:last-child { border-bottom: none; }
+  .auditoria-row .a-hora { color: #756e89; font-size: 10.5px; display: block; margin-top: 2px; }
 </style>
 </head>
 <body>
+
+<div id="loginOverlay" class="login-overlay">
+  <div class="login-box">
+    <h1>Zebra Club</h1>
+    <div class="login-sub">Ingresá tu PIN para entrar</div>
+    <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" id="loginPin" class="login-pin-input" placeholder="----" autocomplete="off">
+    <button class="btn-primary" id="btnLogin">Entrar</button>
+    <div class="status-msg" id="loginStatus"></div>
+  </div>
+</div>
 
 <div class="bg-glow-1"></div>
 <div class="bg-glow-2"></div>
 
 <header>
-  <h1>Zebra Club</h1>
+  <div class="header-top">
+    <h1>Zebra Club</h1>
+    <button class="logout-btn" id="btnLogout" style="display:none;" title="Cerrar sesión"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
+  </div>
   <div class="evento-info" id="eventoInfo">Cargando evento...</div>
+  <div class="user-info" id="userInfo" style="display:none;"></div>
 </header>
 
 <main>
@@ -274,7 +346,9 @@ María López
       <button class="btn-primary" id="btnEscanear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Escanear DNI</button>
       <button class="btn-secondary" id="btnTorch" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span id="btnTorchLabel">Linterna</span></button>
       <button class="btn-secondary" id="btnBuscarManual"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Buscar por nombre (si falla el escaneo)</button>
+      <button class="btn-secondary" id="btnSinDni"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Ingresar sin DNI (olvidado)</button>
       <div id="buscarManualBox" style="display:none;">
+        <div class="status-msg" id="buscarManualModoLabel"></div>
         <label>Nombre</label>
         <input type="text" id="inputBuscar" placeholder="Escribí para buscar...">
         <div id="resultadosBusqueda"></div>
@@ -309,12 +383,38 @@ María López
     </div>
   </div>
 
+  <!-- VISTA USUARIOS (solo admin) -->
+  <div class="view" id="view-usuarios">
+    <div class="card centro">
+      <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/></svg>Agregar persona</h2>
+      <label>Nombre</label>
+      <input type="text" id="nuevoUsuarioNombre" placeholder="Ej: Carla Díaz">
+      <label>Acceso</label>
+      <select id="nuevoUsuarioRol">
+        <option value="carga">Carga (horario + listas)</option>
+        <option value="puerta">Puerta + Resumen</option>
+        <option value="admin">Admin (todo + Usuarios)</option>
+      </select>
+      <button class="btn-primary" id="btnCrearUsuario">Generar PIN</button>
+      <div class="status-msg" id="usuarioStatus"></div>
+    </div>
+    <div class="card">
+      <h2>Personas con acceso</h2>
+      <div id="listaUsuarios"><div class="muted">Cargando...</div></div>
+    </div>
+    <div class="card">
+      <h2>Actividad reciente</h2>
+      <div id="listaAuditoria"><div class="muted">Sin actividad todavía.</div></div>
+    </div>
+  </div>
+
 </main>
 
 <div class="tabbar">
   <button class="tab-btn active" data-view="carga"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/></svg></span>Carga</button>
   <button class="tab-btn" data-view="puerta"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="1.5"/><circle cx="15" cy="12" r="1"/></svg></span>Puerta</button>
   <button class="tab-btn" data-view="resumen"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg></span>Resumen</button>
+  <button class="tab-btn" data-view="usuarios" id="tabUsuariosBtn"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/></svg></span>Usuarios</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -332,6 +432,7 @@ María López
 const SVG_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
 const SVG_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
 const SVG_CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+const SVG_PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
 
 /* ---------- Firebase init ---------- */
 const firebaseConfig = {
@@ -461,9 +562,209 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('view-' + btn.dataset.view).classList.add('active');
+    if (btn.dataset.view === 'usuarios') { renderUsuarios(); renderAuditoria(); }
   });
 });
-document.getElementById('view-carga').classList.add('active');
+
+/* ---------- Login por PIN + roles ---------- */
+// Roles: "carga" ve solo Carga; "puerta" ve Puerta+Resumen; "admin" ve todo + Usuarios.
+const PERMISOS_POR_ROL = {
+  carga: ['carga'],
+  puerta: ['puerta', 'resumen'],
+  admin: ['carga', 'puerta', 'resumen', 'usuarios']
+};
+let sesion = null; // { id, nombre, rol }
+
+function etiquetaRol(rol) {
+  return rol === 'admin' ? 'Admin' : rol === 'carga' ? 'Carga' : 'Puerta';
+}
+
+function cargarSesionGuardada() {
+  try {
+    const raw = localStorage.getItem('zebraSesion');
+    if (raw) sesion = JSON.parse(raw);
+  } catch (e) { sesion = null; }
+}
+function guardarSesion() {
+  try { localStorage.setItem('zebraSesion', JSON.stringify(sesion)); } catch (e) {}
+}
+
+function mostrarLogin(mensaje) {
+  sesion = null;
+  try { localStorage.removeItem('zebraSesion'); } catch (e) {}
+  document.getElementById('loginOverlay').style.display = 'flex';
+  document.getElementById('loginPin').value = '';
+  document.getElementById('loginStatus').textContent = mensaje || '';
+  document.getElementById('loginStatus').className = 'status-msg' + (mensaje ? ' err' : '');
+  document.getElementById('userInfo').style.display = 'none';
+  document.getElementById('btnLogout').style.display = 'none';
+}
+
+function aplicarSesion() {
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('userInfo').style.display = 'block';
+  document.getElementById('userInfo').textContent = sesion.nombre + ' · ' + etiquetaRol(sesion.rol);
+  document.getElementById('btnLogout').style.display = 'flex';
+
+  const permitido = PERMISOS_POR_ROL[sesion.rol] || [];
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.style.display = permitido.includes(btn.dataset.view) ? 'flex' : 'none';
+  });
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  const primero = permitido[0];
+  if (primero) {
+    document.querySelector('.tab-btn[data-view="' + primero + '"]').classList.add('active');
+    document.getElementById('view-' + primero).classList.add('active');
+    if (primero === 'usuarios') { renderUsuarios(); renderAuditoria(); }
+  }
+}
+
+function intentarLogin() {
+  const pin = document.getElementById('loginPin').value.trim();
+  const statusEl = document.getElementById('loginStatus');
+  if (!pin) return;
+  statusEl.textContent = 'Verificando...';
+  statusEl.className = 'status-msg';
+  db.collection('usuarios').where('pin', '==', pin).where('activo', '==', true).limit(1).get()
+    .then(snap => {
+      if (snap.empty) {
+        statusEl.textContent = 'PIN incorrecto.';
+        statusEl.className = 'status-msg err';
+        return;
+      }
+      const doc = snap.docs[0];
+      sesion = { id: doc.id, nombre: doc.data().nombre, rol: doc.data().rol };
+      guardarSesion();
+      aplicarSesion();
+    })
+    .catch(e => {
+      statusEl.textContent = 'Error: ' + e.message;
+      statusEl.className = 'status-msg err';
+    });
+}
+document.getElementById('btnLogin').addEventListener('click', intentarLogin);
+document.getElementById('loginPin').addEventListener('keypress', e => { if (e.key === 'Enter') intentarLogin(); });
+
+document.getElementById('btnLogout').addEventListener('click', () => {
+  if (confirm('¿Cerrar sesión?')) mostrarLogin();
+});
+
+// Si la colección de usuarios está vacía (primera vez que se usa este sistema),
+// se crea un admin semilla con PIN 0000 para poder entrar y cargar el resto del equipo.
+// Conviene que Manu cree su propio usuario admin y desactive/cambie este apenas pueda.
+function bootstrapAdminSiHaceFalta() {
+  return db.collection('usuarios').limit(1).get().then(snap => {
+    if (snap.empty) {
+      return db.collection('usuarios').add({
+        nombre: 'Admin', pin: '0000', rol: 'admin', activo: true,
+        creadoEn: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+  }).catch(() => {});
+}
+
+cargarSesionGuardada();
+bootstrapAdminSiHaceFalta().finally(() => {
+  if (!sesion) { mostrarLogin(); return; }
+  // revalidar que la sesión guardada siga activa (por si fue dada de baja)
+  db.collection('usuarios').doc(sesion.id).get().then(doc => {
+    if (doc.exists && doc.data().activo) {
+      sesion = { id: doc.id, nombre: doc.data().nombre, rol: doc.data().rol };
+      guardarSesion();
+      aplicarSesion();
+    } else {
+      mostrarLogin('Tu acceso fue desactivado. Pedile a un admin que te dé de alta de nuevo.');
+    }
+  }).catch(() => aplicarSesion()); // sin conexión: dejamos pasar con la sesión ya guardada
+});
+
+/* ---------- Registro de auditoría ---------- */
+function registrarAuditoria(accion, detalle) {
+  db.collection('auditoria').add({
+    accion, detalle,
+    usuario: sesion ? sesion.nombre : '—',
+    rol: sesion ? sesion.rol : '—',
+    creadoEn: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(() => {});
+}
+
+function renderAuditoria() {
+  const cont = document.getElementById('listaAuditoria');
+  db.collection('auditoria').orderBy('creadoEn', 'desc').limit(20).get().then(snap => {
+    if (snap.empty) { cont.innerHTML = '<div class="muted">Sin actividad todavía.</div>'; return; }
+    cont.innerHTML = snap.docs.map(d => {
+      const a = d.data();
+      const hora = a.creadoEn && a.creadoEn.toDate ? a.creadoEn.toDate().toLocaleString('es-AR') : '';
+      return `<div class="auditoria-row"><strong>${escapeHtml(a.usuario || '—')}</strong> — ${escapeHtml(a.detalle || a.accion || '')}<span class="a-hora">${escapeHtml(hora)}</span></div>`;
+    }).join('');
+  }).catch(() => { cont.innerHTML = '<div class="muted">No se pudo cargar la actividad.</div>'; });
+}
+
+/* ---------- Pestaña Usuarios (alta/baja de personas, solo admin) ---------- */
+function generarPin4Digitos() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+document.getElementById('btnCrearUsuario').addEventListener('click', () => {
+  const nombre = document.getElementById('nuevoUsuarioNombre').value.trim();
+  const rol = document.getElementById('nuevoUsuarioRol').value;
+  const statusEl = document.getElementById('usuarioStatus');
+  if (!nombre) {
+    statusEl.textContent = 'Falta el nombre.';
+    statusEl.className = 'status-msg err';
+    return;
+  }
+  statusEl.textContent = 'Generando PIN...';
+  statusEl.className = 'status-msg';
+
+  function intentarConPinUnico(intentos) {
+    const pin = generarPin4Digitos();
+    db.collection('usuarios').where('pin', '==', pin).where('activo', '==', true).limit(1).get().then(snap => {
+      if (!snap.empty && intentos > 0) { intentarConPinUnico(intentos - 1); return; }
+      db.collection('usuarios').add({
+        nombre, rol, pin, activo: true, creadoEn: firebase.firestore.FieldValue.serverTimestamp()
+      }).then(() => {
+        statusEl.innerHTML = `${escapeHtml(nombre)} creado/a. Su PIN es <strong>${pin}</strong> — pasáselo para que pueda entrar.`;
+        statusEl.className = 'status-msg ok';
+        document.getElementById('nuevoUsuarioNombre').value = '';
+        registrarAuditoria('alta_usuario', 'Agregó a ' + nombre + ' (' + etiquetaRol(rol) + ')');
+        renderUsuarios();
+      }).catch(e => {
+        statusEl.textContent = 'Error: ' + e.message;
+        statusEl.className = 'status-msg err';
+      });
+    });
+  }
+  intentarConPinUnico(5);
+});
+
+function renderUsuarios() {
+  const cont = document.getElementById('listaUsuarios');
+  db.collection('usuarios').orderBy('creadoEn', 'asc').get().then(snap => {
+    if (snap.empty) { cont.innerHTML = '<div class="muted">Todavía no hay nadie cargado.</div>'; return; }
+    cont.innerHTML = snap.docs.map(d => {
+      const u = d.data();
+      const tagClass = u.rol === 'admin' ? 'tag-admin' : (u.rol === 'carga' ? 'tag-rrpp' : 'tag-dueno');
+      return `<div class="usuario-row${u.activo ? '' : ' inactivo'}">
+        <span><span class="u-nombre">${escapeHtml(u.nombre)}</span> <span class="tag ${tagClass}">${etiquetaRol(u.rol)}</span></span>
+        <span class="u-right">
+          <span class="u-pin">${escapeHtml(u.pin)}</span>
+          <button class="btn-sm btn-secondary" data-id="${d.id}" data-activo="${u.activo}" data-nombre="${escapeAttr(u.nombre)}">${u.activo ? 'Desactivar' : 'Activar'}</button>
+        </span>
+      </div>`;
+    }).join('');
+    cont.querySelectorAll('button[data-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const nuevoEstado = btn.dataset.activo !== 'true';
+        db.collection('usuarios').doc(btn.dataset.id).update({ activo: nuevoEstado }).then(() => {
+          registrarAuditoria(nuevoEstado ? 'reactivar_usuario' : 'desactivar_usuario', (nuevoEstado ? 'Reactivó' : 'Desactivó') + ' a ' + btn.dataset.nombre);
+          renderUsuarios();
+        });
+      });
+    });
+  }).catch(() => { cont.innerHTML = '<div class="muted">No se pudo cargar la lista.</div>'; });
+}
 
 /* ---------- Config del evento ---------- */
 db.collection('config').doc('evento').onSnapshot(doc => {
@@ -523,6 +824,7 @@ document.getElementById('btnAgregarLista').addEventListener('click', () => {
       horaIngreso: null,
       dni: null,
       edadCalculada: null,
+      cargadoPor: sesion ? sesion.nombre : null,
       creadoEn: firebase.firestore.FieldValue.serverTimestamp()
     });
   });
@@ -530,6 +832,7 @@ document.getElementById('btnAgregarLista').addEventListener('click', () => {
     statusEl.textContent = lineas.length + ' persona(s) agregada(s) a la lista de ' + responsable + '.';
     statusEl.className = 'status-msg ok';
     document.getElementById('nuevosNombres').value = '';
+    registrarAuditoria('carga_lista', 'Cargó ' + lineas.length + ' nombre(s) en la lista de ' + responsable);
   }).catch(e => {
     statusEl.textContent = 'Error: ' + e.message;
     statusEl.className = 'status-msg err';
@@ -653,6 +956,7 @@ function renderPendientes() {
         <h3>${escapeHtml(responsable)} <span class="tag ${tipo === 'rrpp' ? 'tag-rrpp' : 'tag-dueno'}">${tipo === 'rrpp' ? 'RRPP' : 'DUEÑO'}</span></h3>
         <span class="grupo-right">
           <span class="grupo-count">${items.length} ${items.length === 1 ? 'persona' : 'personas'}<span class="chevron${abierto ? ' abierto' : ''}">${SVG_CHEVRON}</span></span>
+          <button class="grupo-add-btn" data-key="${escapeAttr(key)}" title="Agregar una persona a esta lista">${SVG_PLUS}</button>
           <button class="grupo-del-btn" data-key="${escapeAttr(key)}" title="Borrar toda esta lista">${SVG_TRASH}</button>
         </span>
       </div>`;
@@ -679,6 +983,29 @@ function renderPendientes() {
       db.collection('invitados').doc(btn.dataset.id).delete();
     });
   });
+  cont.querySelectorAll('.grupo-add-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const key = btn.dataset.key;
+      const [responsable, tipo] = key.split('||');
+      const nombre = prompt('Agregar una persona a la lista de ' + responsable + ':');
+      if (!nombre || !nombre.trim()) return;
+      db.collection('invitados').add({
+        nombreCompleto: nombre.trim(),
+        responsable,
+        tipo,
+        estado: 'pendiente',
+        horaIngreso: null,
+        dni: null,
+        edadCalculada: null,
+        cargadoPor: sesion ? sesion.nombre : null,
+        creadoEn: firebase.firestore.FieldValue.serverTimestamp()
+      }).then(() => {
+        showToast(nombre.trim() + ' agregado/a a la lista de ' + responsable + '.');
+        registrarAuditoria('carga_lista', 'Agregó 1 nombre (' + nombre.trim() + ') a la lista de ' + responsable);
+      }).catch(e => showToast('Error: ' + e.message));
+    });
+  });
   cont.querySelectorAll('.grupo-del-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -691,7 +1018,10 @@ function renderPendientes() {
       const batch = db.batch();
       items.forEach(i => batch.delete(db.collection('invitados').doc(i.id)));
       batch.commit()
-        .then(() => showToast('Lista de ' + responsable + ' borrada.'))
+        .then(() => {
+          showToast('Lista de ' + responsable + ' borrada.');
+          registrarAuditoria('borrar_lista', 'Borró la lista completa de ' + responsable + ' (' + items.length + (items.length === 1 ? ' persona' : ' personas') + ')');
+        })
         .catch(e => showToast('Error: ' + e.message));
     });
   });
@@ -795,11 +1125,36 @@ document.getElementById('btnDescargarResumen').addEventListener('click', () => {
   descargarResumenTxt(generarTextoResumen());
 });
 
-/* ---------- Búsqueda manual (fallback) ---------- */
+/* ---------- Búsqueda manual (fallback) + ingreso sin DNI ---------- */
+// modoBusquedaManual decide qué pasa al tocar un resultado:
+// "con_dni" (default): hay que escanear el DNI igual para confirmar edad/identidad.
+// "sin_dni": se salta el escaneo por completo (persona sin DNI encima) — sin verificar nada,
+// a criterio del fiscalizador; queda registrado en la auditoría al confirmar.
+let modoBusquedaManual = 'con_dni';
+
+function abrirBusquedaManual(modo) {
+  modoBusquedaManual = modo;
+  const box = document.getElementById('buscarManualBox');
+  box.style.display = 'block';
+  const label = document.getElementById('buscarManualModoLabel');
+  if (modo === 'sin_dni') {
+    label.textContent = '⚠️ Elegí a la persona: vas a confirmar su ingreso SIN escanear el DNI.';
+    label.className = 'status-msg err';
+  } else {
+    label.textContent = 'Elegí a la persona y después escaneá su DNI para confirmar.';
+    label.className = 'status-msg';
+  }
+  renderBusquedaManual();
+}
 document.getElementById('btnBuscarManual').addEventListener('click', () => {
   const box = document.getElementById('buscarManualBox');
-  box.style.display = box.style.display === 'none' ? 'block' : 'none';
-  if (box.style.display === 'block') renderBusquedaManual();
+  if (box.style.display === 'block' && modoBusquedaManual === 'con_dni') { box.style.display = 'none'; return; }
+  abrirBusquedaManual('con_dni');
+});
+document.getElementById('btnSinDni').addEventListener('click', () => {
+  const box = document.getElementById('buscarManualBox');
+  if (box.style.display === 'block' && modoBusquedaManual === 'sin_dni') { box.style.display = 'none'; return; }
+  abrirBusquedaManual('sin_dni');
 });
 document.getElementById('inputBuscar').addEventListener('input', renderBusquedaManual);
 
@@ -820,10 +1175,14 @@ function renderBusquedaManual() {
     el.addEventListener('click', () => {
       const inv = invitados.find(i => i.id === el.dataset.id);
       document.getElementById('buscarManualBox').style.display = 'none';
-      document.getElementById('scanStatus').textContent = 'Seleccionado: ' + inv.nombreCompleto + '. Ahora escaneá su DNI para confirmar identidad y edad.';
-      document.getElementById('scanStatus').className = 'status-msg';
-      preseleccion = inv; // se completará con el escaneo
-      iniciarEscaneo();
+      if (modoBusquedaManual === 'sin_dni') {
+        mostrarCandidato(inv, null, null, 1, true);
+      } else {
+        document.getElementById('scanStatus').textContent = 'Seleccionado: ' + inv.nombreCompleto + '. Ahora escaneá su DNI para confirmar identidad y edad.';
+        document.getElementById('scanStatus').className = 'status-msg';
+        preseleccion = inv; // se completará con el escaneo
+        iniciarEscaneo();
+      }
     });
   });
 }
@@ -949,17 +1308,32 @@ function mostrarMultiplesCandidatos(candidatos, edad, dni) {
   });
 }
 
-function mostrarCandidato(inv, edad, dni, score) {
-  candidato = { invitado: inv, edad, dni, score };
-  document.getElementById('candidatoTitle').textContent = 'Datos encontrados';
+function mostrarCandidato(inv, edad, dni, score, sinDni) {
+  candidato = { invitado: inv, edad, dni, score, sinDni: !!sinDni };
+  document.getElementById('candidatoTitle').textContent = sinDni ? 'Ingreso sin DNI' : 'Datos encontrados';
   document.getElementById('candidatoCard').style.display = 'block';
   document.getElementById('btnConfirmarIngreso').style.display = 'flex';
   const tipo = inv.tipo;
   const infoEl = document.getElementById('candidatoInfo');
+
+  if (sinDni) {
+    // Ingreso sin verificar DNI: no hay edad ni identidad confirmadas, se salta
+    // por completo el checklist automático — queda a criterio del fiscalizador
+    // y registrado en la auditoría al confirmar.
+    infoEl.innerHTML = `
+      <div class="list-item"><span>Nombre en lista</span><strong>${escapeHtml(inv.nombreCompleto)}</strong></div>
+      <div class="list-item"><span>Responsable</span><strong>${escapeHtml(inv.responsable)} <span class="tag ${tipo === 'rrpp' ? 'tag-rrpp' : 'tag-dueno'}">${tipo === 'rrpp' ? 'RRPP' : 'DUEÑO'}</span></strong></div>
+    `;
+    document.getElementById('candidatoChecklist').innerHTML =
+      '<div class="status-msg err" style="text-align:left;">⚠️ No se escaneó el DNI: no hay edad ni identidad verificadas. Confirmá solo si estás seguro/a — queda registrado con tu nombre.</div>';
+    document.getElementById('btnConfirmarIngreso').disabled = false;
+    return;
+  }
+
   infoEl.innerHTML = `
     <div class="list-item"><span>Nombre en lista</span><strong>${escapeHtml(inv.nombreCompleto)}</strong></div>
     <div class="list-item"><span>Responsable</span><strong>${escapeHtml(inv.responsable)} <span class="tag ${tipo === 'rrpp' ? 'tag-rrpp' : 'tag-dueno'}">${tipo === 'rrpp' ? 'RRPP' : 'DUEÑO'}</span></strong></div>
-    ${dni.apellido ? `<div class="list-item"><span>DNI escaneado</span><strong>${escapeHtml(dni.apellido + ' ' + dni.nombre)}</strong></div>` : ''}
+    ${dni && dni.apellido ? `<div class="list-item"><span>DNI escaneado</span><strong>${escapeHtml(dni.apellido + ' ' + dni.nombre)}</strong></div>` : ''}
     <div class="list-item"><span>Edad</span><strong>${edad !== null ? edad + ' años' : 'no calculada'}</strong></div>
   `;
 
@@ -1006,14 +1380,21 @@ document.getElementById('btnCancelarCandidato').addEventListener('click', () => 
 
 document.getElementById('btnConfirmarIngreso').addEventListener('click', () => {
   if (!candidato) return;
-  const { invitado, edad, dni } = candidato;
+  const { invitado, edad, dni, sinDni } = candidato;
+  if (sinDni) {
+    const ok = confirm('¿Confirmás el ingreso de ' + invitado.nombreCompleto + ' SIN haber escaneado su DNI? Esto queda registrado con tu nombre.');
+    if (!ok) return;
+  }
   db.collection('invitados').doc(invitado.id).update({
     estado: 'ingresado',
     horaIngreso: Date.now(),
-    edadCalculada: edad,
-    dni: dni ? { apellido: dni.apellido, nombre: dni.nombre, dni: dni.dni } : null
+    edadCalculada: sinDni ? null : edad,
+    dni: (!sinDni && dni) ? { apellido: dni.apellido, nombre: dni.nombre, dni: dni.dni } : null,
+    ingresadoPor: sesion ? sesion.nombre : null,
+    sinDni: !!sinDni
   }).then(() => {
-    showToast('✅ Ingreso confirmado: ' + invitado.nombreCompleto);
+    showToast(sinDni ? '⚠️ Ingreso sin DNI confirmado: ' + invitado.nombreCompleto : '✅ Ingreso confirmado: ' + invitado.nombreCompleto);
+    registrarAuditoria(sinDni ? 'ingreso_sin_dni' : 'confirmar_ingreso', (sinDni ? 'Confirmó ingreso SIN DNI de ' : 'Confirmó el ingreso de ') + invitado.nombreCompleto);
     candidato = null;
     preseleccion = null;
     document.getElementById('candidatoCard').style.display = 'none';
@@ -1022,6 +1403,12 @@ document.getElementById('btnConfirmarIngreso').addEventListener('click', () => {
     showToast('Error: ' + e.message);
   });
 });
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
