@@ -14,13 +14,20 @@
 <meta name="mobile-web-app-capable" content="yes">
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { height: 100%; }
+  /* OJO: nunca poner height:100% fijo en html/body acá — con contenido que
+     puede crecer mucho (una lista de Pendientes desplegada con muchos nombres,
+     el video de la cámara + resultados de búsqueda en Puerta, etc.) eso le pone
+     un techo fijo al body y hace que el padding-bottom de abajo quede "enterrado"
+     a mitad de camino del contenido real en vez de después de todo — eso es lo
+     que causaba que no se pudiera scrollear hasta el final y el último nombre
+     quedara tapado por la tabbar flotante (bug reportado por Manu el 1/9/2026,
+     visto en video). min-height sí es seguro porque no le pone techo al alto. */
   body {
     margin: 0;
     font-family: -apple-system, system-ui, sans-serif;
     background: #0a0810;
     color: #f4f2f9;
-    padding-bottom: 110px;
+    padding-bottom: calc(150px + env(safe-area-inset-bottom));
     min-height: 100vh;
     position: relative;
   }
