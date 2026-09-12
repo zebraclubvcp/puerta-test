@@ -122,7 +122,7 @@
   .btn-danger { background: #3a1f24; color: #ff8a80; }
   .btn-sm { padding: 6px 10px; font-size: 13px; }
 
-  video { width: 100%; border-radius: 14px; background: #000; display: block; margin-top: 10px; }
+  video { width: 100%; aspect-ratio: 16 / 5; object-fit: cover; border-radius: 14px; background: #000; display: block; margin-top: 10px; }
   .row { display: flex; gap: 8px; }
   .row > * { flex: 1; }
 
@@ -177,6 +177,7 @@
   .tag-dueno { background: rgba(139,92,246,.28); color: #d7c9fc; }
   .badge-ok { background: rgba(66,214,146,.18); color: #7be8b3; }
   .badge-no { background: rgba(255,107,113,.2); color: #ff8a8f; }
+  .badge-warn { background: rgba(217,180,91,.2); color: #e0bf72; }
   .badge { display: inline-block; padding: 4px 11px; border-radius: 20px; font-size: 12px; font-weight: 800; }
 
   .muted { color: #9a8fc0; font-size: 13px; text-align: center; }
@@ -232,6 +233,23 @@
     box-shadow: 0 8px 24px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.15);
   }
   .toast.show { opacity: 1; }
+
+  /* ---------- Modal genérico (carga masiva a una lista existente) ---------- */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 500;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(10,8,16,.75); padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    width: 100%; max-width: 380px;
+    background: linear-gradient(180deg, rgba(255,255,255,.075), rgba(255,255,255,.03));
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    border-radius: 22px; padding: 18px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.3), inset 0 0 0 1px rgba(255,255,255,.06);
+  }
+  .modal-box h3 { margin: 0 0 4px; font-size: 15px; color: #f1eefb; }
+  .modal-box .modal-sub { font-size: 12px; color: #9a8fc0; margin-bottom: 10px; }
 
   /* ---------- Login por PIN ---------- */
   .login-overlay {
@@ -426,6 +444,20 @@ María López
 
 <div class="toast" id="toast"></div>
 
+<div class="modal-overlay" id="modalCargaMasiva">
+  <div class="modal-box">
+    <h3>Agregar a la lista</h3>
+    <div class="modal-sub" id="modalCargaMasivaSub"></div>
+    <label>Nombres (uno por línea)</label>
+    <textarea id="modalCargaMasivaTextarea" placeholder="Juan Pérez
+María López
+..."></textarea>
+    <button class="btn-primary" id="btnModalCargaMasivaConfirmar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Agregar</button>
+    <button class="btn-secondary" id="btnModalCargaMasivaCancelar">Cancelar</button>
+    <div class="status-msg" id="modalCargaMasivaStatus"></div>
+  </div>
+</div>
+
 <!-- Firebase (compat SDK, sin build tools) -->
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
@@ -452,6 +484,11 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+// Sin esto se pierden escrituras en tránsito con cortes de señal o recargas
+// (bug reportado por Manu el 7/9/2026) — no sacar.
+db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+  console.warn('No se pudo activar la persistencia offline de Firestore:', err.code);
+});
 if (window.pdfjsLib) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
@@ -489,10 +526,13 @@ function esApodoDe(a, b) {
 // Matching robusto DNI ⇄ nombre cargado en la lista:
 // - el APELLIDO tiene que aparecer sí o sí (no se abrevia) → filtra cruces entre apellidos distintos
 // - el NOMBRE tolera apodos/versiones cortas, porque nadie anota su nombre legal completo en una lista
-// Devuelve null si no hay ningún indicio de apellido en común (no es candidato).
+// - si NO hay apellido en común (muchas listas a mano solo tienen nombre/apodo), en vez de
+//   descartar directo matcheamos por nombre/apodo solo, con puntaje más bajo y marcado como
+//   soloNombre, para que la puerta lo confirme a ojo (bug reportado por Manu el 7/9/2026).
+// Devuelve null si no hay ningún indicio (ni apellido ni nombre/apodo) en común.
 function matchScoreDetallado(apellidoTokensDni, nombreTokensDni, nombreCompletoLista) {
   const invTokens = tokens(nombreCompletoLista);
-  if (!invTokens.length || !apellidoTokensDni.length) return null;
+  if (!invTokens.length) return null;
 
   const usados = new Set();
   let apellidoHits = 0;
@@ -500,7 +540,17 @@ function matchScoreDetallado(apellidoTokensDni, nombreTokensDni, nombreCompletoL
     const idx = invTokens.findIndex((it, i) => it === t && !usados.has(i));
     if (idx !== -1) { apellidoHits++; usados.add(idx); }
   });
-  if (apellidoHits === 0) return null; // ningún apellido coincide: no es candidato
+
+  if (apellidoHits === 0) {
+    if (!nombreTokensDni.length) return null;
+    let nombreHitsSolo = 0;
+    nombreTokensDni.forEach(nt => {
+      if (invTokens.some(it => esApodoDe(nt, it))) nombreHitsSolo++;
+    });
+    if (nombreHitsSolo === 0) return null;
+    const nombreRatioSolo = nombreHitsSolo / nombreTokensDni.length;
+    return { score: nombreRatioSolo * 0.5, apellidoRatio: 0, nombreRatio: nombreRatioSolo, apellidoHits: 0, soloNombre: true };
+  }
 
   const apellidoRatio = apellidoHits / apellidoTokensDni.length;
   const restantes = invTokens.filter((_, i) => !usados.has(i));
@@ -512,7 +562,7 @@ function matchScoreDetallado(apellidoTokensDni, nombreTokensDni, nombreCompletoL
   const nombreRatio = nombreTokensDni.length ? nombreHits / nombreTokensDni.length : 1;
 
   const score = apellidoRatio * 0.65 + nombreRatio * 0.35;
-  return { score, apellidoRatio, nombreRatio, apellidoHits };
+  return { score, apellidoRatio, nombreRatio, apellidoHits, soloNombre: false };
 }
 
 function showToast(msg) {
@@ -993,24 +1043,7 @@ function renderPendientes() {
   cont.querySelectorAll('.grupo-add-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const key = btn.dataset.key;
-      const [responsable, tipo] = key.split('||');
-      const nombre = prompt('Agregar una persona a la lista de ' + responsable + ':');
-      if (!nombre || !nombre.trim()) return;
-      db.collection('invitados').add({
-        nombreCompleto: nombre.trim(),
-        responsable,
-        tipo,
-        estado: 'pendiente',
-        horaIngreso: null,
-        dni: null,
-        edadCalculada: null,
-        cargadoPor: sesion ? sesion.nombre : null,
-        creadoEn: firebase.firestore.FieldValue.serverTimestamp()
-      }).then(() => {
-        showToast(nombre.trim() + ' agregado/a a la lista de ' + responsable + '.');
-        registrarAuditoria('carga_lista', 'Agregó 1 nombre (' + nombre.trim() + ') a la lista de ' + responsable);
-      }).catch(e => showToast('Error: ' + e.message));
+      abrirModalCargaMasiva(btn.dataset.key);
     });
   });
   cont.querySelectorAll('.grupo-del-btn').forEach(btn => {
@@ -1033,6 +1066,59 @@ function renderPendientes() {
     });
   });
 }
+
+/* ---------- Modal: carga masiva a una lista existente (reemplaza el prompt() de a un nombre) ---------- */
+let modalCargaMasivaKey = null;
+
+function abrirModalCargaMasiva(key) {
+  modalCargaMasivaKey = key;
+  const [responsable] = key.split('||');
+  document.getElementById('modalCargaMasivaSub').textContent = 'Se van a agregar a la lista de ' + responsable + '.';
+  document.getElementById('modalCargaMasivaTextarea').value = '';
+  document.getElementById('modalCargaMasivaStatus').textContent = '';
+  document.getElementById('modalCargaMasivaStatus').className = 'status-msg';
+  document.getElementById('modalCargaMasiva').classList.add('show');
+  document.getElementById('modalCargaMasivaTextarea').focus();
+}
+function cerrarModalCargaMasiva() {
+  document.getElementById('modalCargaMasiva').classList.remove('show');
+  modalCargaMasivaKey = null;
+}
+document.getElementById('btnModalCargaMasivaCancelar').addEventListener('click', cerrarModalCargaMasiva);
+document.getElementById('btnModalCargaMasivaConfirmar').addEventListener('click', () => {
+  if (!modalCargaMasivaKey) return;
+  const [responsable, tipo] = modalCargaMasivaKey.split('||');
+  const lineas = document.getElementById('modalCargaMasivaTextarea').value.split('\n').map(l => l.trim()).filter(Boolean);
+  const statusEl = document.getElementById('modalCargaMasivaStatus');
+  if (!lineas.length) {
+    statusEl.textContent = 'Cargá al menos un nombre.';
+    statusEl.className = 'status-msg err';
+    return;
+  }
+  const batch = db.batch();
+  lineas.forEach(nombreCompleto => {
+    const ref = db.collection('invitados').doc();
+    batch.set(ref, {
+      nombreCompleto,
+      responsable,
+      tipo,
+      estado: 'pendiente',
+      horaIngreso: null,
+      dni: null,
+      edadCalculada: null,
+      cargadoPor: sesion ? sesion.nombre : null,
+      creadoEn: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  });
+  batch.commit().then(() => {
+    showToast(lineas.length + ' persona(s) agregada(s) a la lista de ' + responsable + '.');
+    registrarAuditoria('carga_lista', 'Agregó ' + lineas.length + ' nombre(s) a la lista de ' + responsable);
+    cerrarModalCargaMasiva();
+  }).catch(e => {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.className = 'status-msg err';
+  });
+});
 
 function escapeHtml(str) {
   const d = document.createElement('div');
@@ -1290,7 +1376,7 @@ function onDniEscaneado(dni) {
   const ambiguo = !!segundo && (top.score - segundo.score) < 0.2;
 
   if (!ambiguo) {
-    mostrarCandidato(top.p, edad, dni, top.score);
+    mostrarCandidato(top.p, edad, dni, top.score, false, top.soloNombre);
   } else {
     mostrarMultiplesCandidatos(candidatos, edad, dni);
   }
@@ -1304,19 +1390,19 @@ function mostrarMultiplesCandidatos(candidatos, edad, dni) {
     `<div class="muted">DNI escaneado: <strong>${escapeHtml(dni.apellido + ' ' + dni.nombre)}</strong>${edad !== null ? ' · ' + edad + ' años' : ''}. Elegí a quién corresponde:</div>`;
   const checklistEl = document.getElementById('candidatoChecklist');
   checklistEl.innerHTML = candidatos.slice(0, 6).map((c, idx) =>
-    `<div class="search-result" data-idx="${idx}">${escapeHtml(c.p.nombreCompleto)} <span class="tag ${c.p.tipo === 'rrpp' ? 'tag-rrpp' : 'tag-dueno'}">${c.p.tipo === 'rrpp' ? 'RRPP' : 'DUEÑO'}</span> · ${escapeHtml(c.p.responsable)}</div>`
+    `<div class="search-result" data-idx="${idx}">${escapeHtml(c.p.nombreCompleto)} <span class="tag ${c.p.tipo === 'rrpp' ? 'tag-rrpp' : 'tag-dueno'}">${c.p.tipo === 'rrpp' ? 'RRPP' : 'DUEÑO'}</span> · ${escapeHtml(c.p.responsable)}${c.soloNombre ? ' · ⚠️ solo por nombre' : ''}</div>`
   ).join('');
   document.getElementById('btnConfirmarIngreso').style.display = 'none';
   checklistEl.querySelectorAll('.search-result').forEach(el => {
     el.addEventListener('click', () => {
       const c = candidatos[Number(el.dataset.idx)];
-      mostrarCandidato(c.p, edad, dni, c.score);
+      mostrarCandidato(c.p, edad, dni, c.score, false, c.soloNombre);
     });
   });
 }
 
-function mostrarCandidato(inv, edad, dni, score, sinDni) {
-  candidato = { invitado: inv, edad, dni, score, sinDni: !!sinDni };
+function mostrarCandidato(inv, edad, dni, score, sinDni, soloNombre) {
+  candidato = { invitado: inv, edad, dni, score, sinDni: !!sinDni, soloNombre: !!soloNombre };
   document.getElementById('candidatoTitle').textContent = sinDni ? 'Ingreso sin DNI' : 'Datos encontrados';
   document.getElementById('candidatoCard').style.display = 'block';
   document.getElementById('btnConfirmarIngreso').style.display = 'flex';
@@ -1338,10 +1424,11 @@ function mostrarCandidato(inv, edad, dni, score, sinDni) {
   }
 
   infoEl.innerHTML = `
+    ${soloNombre ? '<div class="status-msg err" style="text-align:left;">⚠️ Coincidencia solo por nombre (el apellido escaneado no coincidió con la lista) — confirmá bien que es la persona correcta.</div>' : ''}
     <div class="list-item"><span>Nombre en lista</span><strong>${escapeHtml(inv.nombreCompleto)}</strong></div>
     <div class="list-item"><span>Responsable</span><strong>${escapeHtml(inv.responsable)} <span class="tag ${tipo === 'rrpp' ? 'tag-rrpp' : 'tag-dueno'}">${tipo === 'rrpp' ? 'RRPP' : 'DUEÑO'}</span></strong></div>
     ${dni && dni.apellido ? `<div class="list-item"><span>DNI escaneado</span><strong>${escapeHtml(dni.apellido + ' ' + dni.nombre)}</strong></div>` : ''}
-    <div class="list-item"><span>Edad</span><strong>${edad !== null ? edad + ' años' : 'no calculada'}</strong></div>
+    <div class="list-item"><span>Edad</span><strong>${edad !== null ? edad + ' años' : 'no se pudo leer'}</strong></div>
   `;
 
   const checklistEl = document.getElementById('candidatoChecklist');
@@ -1349,9 +1436,18 @@ function mostrarCandidato(inv, edad, dni, score, sinDni) {
   let html = '';
 
   if (tipo === 'rrpp') {
-    const edadOk = edad !== null && edad >= 20;
-    html += `<div class="list-item"><span>Requisito +20 años</span><span class="badge ${edadOk ? 'badge-ok' : 'badge-no'}">${edadOk ? 'OK' : 'NO CUMPLE'}</span></div>`;
-    if (!edadOk) bloqueaIngreso = true;
+    const edadDesconocida = edad === null;
+    if (edadDesconocida) {
+      // calcularEdad() devolvió null por ruido en el escaneo — antes esto se trataba
+      // como "NO CUMPLE +20" (falso rechazo, bug reportado por Manu el 7/9/2026).
+      // Ahora se pide confirmación manual en vez de bloquear automáticamente.
+      html += `<div class="list-item"><span>Requisito +20 años</span><span class="badge badge-warn">NO SE PUDO LEER</span></div>`;
+      html += `<div class="checkline"><input type="checkbox" id="chkEdadManual"><label for="chkEdadManual" style="margin:0;">Confirmo a ojo que es mayor de 20 años (no se pudo calcular la edad del escaneo)</label></div>`;
+    } else {
+      const edadOk = edad >= 20;
+      html += `<div class="list-item"><span>Requisito +20 años</span><span class="badge ${edadOk ? 'badge-ok' : 'badge-no'}">${edadOk ? 'OK' : 'NO CUMPLE'}</span></div>`;
+      if (!edadOk) bloqueaIngreso = true;
+    }
 
     const excedido = excedeHorario(evento.horaCorte);
     html += `<div class="list-item"><span>Horario (corte ${escapeHtml(evento.horaCorte || '--:--')})</span><span class="badge ${!excedido ? 'badge-ok' : 'badge-no'}">${!excedido ? 'OK' : 'FUERA DE HORARIO'}</span></div>`;
@@ -1366,8 +1462,10 @@ function mostrarCandidato(inv, edad, dni, score, sinDni) {
   const btnConfirmar = document.getElementById('btnConfirmarIngreso');
   function actualizarBoton() {
     if (tipo === 'rrpp') {
-      const chk = document.getElementById('chkVcp');
-      btnConfirmar.disabled = bloqueaIngreso || !chk.checked;
+      const chkVcp = document.getElementById('chkVcp');
+      const chkEdadManual = document.getElementById('chkEdadManual');
+      const edadPendiente = !!chkEdadManual && !chkEdadManual.checked;
+      btnConfirmar.disabled = bloqueaIngreso || !chkVcp.checked || edadPendiente;
     } else {
       btnConfirmar.disabled = false;
     }
@@ -1375,6 +1473,8 @@ function mostrarCandidato(inv, edad, dni, score, sinDni) {
   actualizarBoton();
   if (tipo === 'rrpp') {
     document.getElementById('chkVcp').addEventListener('change', actualizarBoton);
+    const chkEdadManual = document.getElementById('chkEdadManual');
+    if (chkEdadManual) chkEdadManual.addEventListener('change', actualizarBoton);
   }
 }
 
