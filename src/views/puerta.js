@@ -1,7 +1,7 @@
 // @ts-check
 import { db } from '../firebase.js';
 import { getSesion } from '../auth.js';
-import { getEventoActivo } from '../eventos.js';
+import { getEventoActivo, getEdadMinimaActiva } from '../eventos.js';
 import { getInvitados, onInvitadosChange } from '../invitados.js';
 import { registrarAuditoria } from '../auditoria.js';
 import { normalizar, tokens, matchScoreDetallado } from '../matching.js';
@@ -269,16 +269,17 @@ function mostrarCandidato(inv, edad, dni, score, sinDni, soloNombre) {
   let html = '';
 
   if (tipo === 'rrpp') {
+    const edadMinima = getEdadMinimaActiva();
     const edadDesconocida = edad === null;
     if (edadDesconocida) {
       // calcularEdad() devolvió null por ruido en el escaneo — antes esto se trataba
       // como "NO CUMPLE +20" (falso rechazo, bug reportado por Manu el 7/9/2026).
       // Ahora se pide confirmación manual en vez de bloquear automáticamente.
-      html += `<div class="list-item"><span>Requisito +20 años</span><span class="badge badge-warn">NO SE PUDO LEER</span></div>`;
-      html += `<div class="checkline"><input type="checkbox" id="chkEdadManual"><label for="chkEdadManual" style="margin:0;">Confirmo a ojo que es mayor de 20 años (no se pudo calcular la edad del escaneo)</label></div>`;
+      html += `<div class="list-item"><span>Requisito +${edadMinima} años</span><span class="badge badge-warn">NO SE PUDO LEER</span></div>`;
+      html += `<div class="checkline"><input type="checkbox" id="chkEdadManual"><label for="chkEdadManual" style="margin:0;">Confirmo a ojo que es mayor de ${edadMinima} años (no se pudo calcular la edad del escaneo)</label></div>`;
     } else {
-      const edadOk = /** @type {number} */ (edad) >= 20;
-      html += `<div class="list-item"><span>Requisito +20 años</span><span class="badge ${edadOk ? 'badge-ok' : 'badge-no'}">${edadOk ? 'OK' : 'NO CUMPLE'}</span></div>`;
+      const edadOk = /** @type {number} */ (edad) >= edadMinima;
+      html += `<div class="list-item"><span>Requisito +${edadMinima} años</span><span class="badge ${edadOk ? 'badge-ok' : 'badge-no'}">${edadOk ? 'OK' : 'NO CUMPLE'}</span></div>`;
       if (!edadOk) bloqueaIngreso = true;
     }
 

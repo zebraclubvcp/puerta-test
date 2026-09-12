@@ -1,7 +1,7 @@
 // @ts-check
 import { db, firebase } from '../firebase.js';
 import { getSesion } from '../auth.js';
-import { onEventoActivoChange, getEventoActivo, guardarEventoDeHoy } from '../eventos.js';
+import { onEventoActivoChange, getEventoActivo, guardarEventoDeHoy, EDAD_MINIMA_DEFECTO } from '../eventos.js';
 import { onInvitadosChange } from '../invitados.js';
 import { registrarAuditoria } from '../auditoria.js';
 import { leerNombresDePdf } from '../listImport.js';
@@ -22,17 +22,25 @@ export function initCarga() {
 function initConfigEvento() {
   const cfgNombre = /** @type {HTMLInputElement} */ (document.getElementById('cfgNombre'));
   const cfgHora = /** @type {HTMLInputElement} */ (document.getElementById('cfgHora'));
+  const cfgEdadMinima = /** @type {HTMLInputElement} */ (document.getElementById('cfgEdadMinima'));
   const cfgStatus = /** @type {HTMLElement} */ (document.getElementById('cfgStatus'));
 
   onEventoActivoChange(evento => {
     cfgNombre.value = evento ? (evento.nombreEvento || '') : '';
     cfgHora.value = evento ? (evento.horaCorte || '02:00') : '02:00';
+    const edadMinima = (evento && evento.edadMinima) || EDAD_MINIMA_DEFECTO;
+    cfgEdadMinima.value = String(edadMinima);
+    actualizarEtiquetaTipoRrpp(edadMinima);
   });
 
   document.getElementById('btnGuardarEvento')?.addEventListener('click', () => {
     const nombreEvento = cfgNombre.value.trim();
     const horaCorte = cfgHora.value;
-    guardarEventoDeHoy({ nombreEvento, horaCorte })
+    const edadMinimaIngresada = parseInt(cfgEdadMinima.value, 10);
+    const edadMinima = Number.isFinite(edadMinimaIngresada) && edadMinimaIngresada > 0
+      ? edadMinimaIngresada
+      : EDAD_MINIMA_DEFECTO;
+    guardarEventoDeHoy({ nombreEvento, horaCorte, edadMinima })
       .then(() => {
         cfgStatus.textContent = 'Evento guardado.';
         cfgStatus.className = 'status-msg ok';
@@ -42,6 +50,12 @@ function initConfigEvento() {
         cfgStatus.className = 'status-msg err';
       });
   });
+}
+
+/** @param {number} edadMinima */
+function actualizarEtiquetaTipoRrpp(edadMinima) {
+  const opt = document.querySelector('#nuevoTipo option[value="rrpp"]');
+  if (opt) opt.textContent = `RRPP (+${edadMinima}, horario, VCP/alrededores)`;
 }
 
 /* ---------- Carga de listas ---------- */

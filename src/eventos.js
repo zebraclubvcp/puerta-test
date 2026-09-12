@@ -7,7 +7,12 @@
 // noche activa en este momento — invitados.js filtra por ese id.
 import { db, firebase } from './firebase.js';
 
-/** @typedef {{ id: string, nombreEvento: string, fecha: string, horaCorte: string }} Evento */
+/** @typedef {{ id: string, nombreEvento: string, fecha: string, horaCorte: string, edadMinima?: number }} Evento */
+
+// valor por defecto de "edad mínima para listas RRPP" cuando el evento activo
+// todavía no tiene nada cargado (eventos viejos, o recién creado) — antes esto
+// estaba hardcodeado en +20 en varios lugares del código.
+export const EDAD_MINIMA_DEFECTO = 20;
 
 /** @type {Evento|null} */
 let eventoActivo = null;
@@ -30,6 +35,11 @@ export function onEventoActivoChange(callback) {
 
 export function getEventoActivo() {
   return eventoActivo;
+}
+
+/** Edad mínima del evento activo, o el valor por defecto si no tiene nada cargado. */
+export function getEdadMinimaActiva() {
+  return (eventoActivo && eventoActivo.edadMinima) || EDAD_MINIMA_DEFECTO;
 }
 
 /** @type {(() => void)|null} */
@@ -62,21 +72,22 @@ db.collection('config').doc('activo').onSnapshot((/** @type {any} */ doc) => {
  * un día nuevo, crea un evento nuevo y lo marca como activo — así la próxima
  * noche arranca con la lista de invitados vacía sin que nadie tenga que
  * resetear nada a mano.
- * @param {{ nombreEvento: string, horaCorte: string }} datos
+ * @param {{ nombreEvento: string, horaCorte: string, edadMinima: number }} datos
  * @returns {Promise<string>} el id del evento (nuevo o existente) que quedó activo
  */
-export async function guardarEventoDeHoy({ nombreEvento, horaCorte }) {
+export async function guardarEventoDeHoy({ nombreEvento, horaCorte, edadMinima }) {
   const fecha = new Date().toISOString().slice(0, 10);
   const existente = await db.collection('eventos').where('fecha', '==', fecha).limit(1).get();
 
   let eventoId;
   if (!existente.empty) {
     eventoId = existente.docs[0].id;
-    await db.collection('eventos').doc(eventoId).update({ nombreEvento, horaCorte });
+    await db.collection('eventos').doc(eventoId).update({ nombreEvento, horaCorte, edadMinima });
   } else {
     const ref = await db.collection('eventos').add({
       nombreEvento,
       horaCorte,
+      edadMinima,
       fecha,
       creadoEn: firebase.firestore.FieldValue.serverTimestamp()
     });
