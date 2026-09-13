@@ -334,6 +334,8 @@
       <input type="text" id="cfgNombre" placeholder="Ej: Sábado Kosmos">
       <label>Horario de corte para listas de RRPP</label>
       <input type="time" id="cfgHora" value="02:00">
+      <label>Edad mínima para listas de RRPP</label>
+      <input type="number" id="cfgEdadMinima" min="1" max="99" step="1" value="20">
       <button class="btn-primary" id="btnGuardarEvento">Guardar evento</button>
       <div class="status-msg" id="cfgStatus"></div>
     </div>
@@ -494,7 +496,8 @@ if (window.pdfjsLib) {
 }
 
 /* ---------- Estado global ---------- */
-let evento = { nombreEvento: '', fecha: '', horaCorte: '02:00' };
+let evento = { nombreEvento: '', fecha: '', horaCorte: '02:00', edadMinima: 20 };
+const EDAD_MINIMA_DEFECTO = 20; // si el evento no tiene nada cargado, para no romper lo que ya funciona
 let invitados = []; // cache local, sincronizado en vivo
 let candidato = null; // { invitadoId, nombreCompleto, responsable, tipo, edad, dniRaw, matchScore }
 let gruposExpandido = {}; // key -> bool, qué grupos de "Pendientes" están desplegados
@@ -824,13 +827,21 @@ function renderUsuarios() {
 }
 
 /* ---------- Config del evento ---------- */
+function actualizarEtiquetaTipoRrpp(edadMinima) {
+  const opt = document.querySelector('#nuevoTipo option[value="rrpp"]');
+  if (opt) opt.textContent = 'RRPP (+' + edadMinima + ', horario, VCP/alrededores)';
+}
+
 db.collection('config').doc('evento').onSnapshot(doc => {
   if (doc.exists) {
     evento = doc.data();
+    const edadMinima = evento.edadMinima || EDAD_MINIMA_DEFECTO;
     document.getElementById('cfgNombre').value = evento.nombreEvento || '';
     document.getElementById('cfgHora').value = evento.horaCorte || '02:00';
+    document.getElementById('cfgEdadMinima').value = edadMinima;
     document.getElementById('eventoInfo').textContent =
       (evento.nombreEvento || 'Sin nombre') + ' · corte RRPP ' + (evento.horaCorte || '--:--');
+    actualizarEtiquetaTipoRrpp(edadMinima);
   } else {
     document.getElementById('eventoInfo').textContent = 'Configurá el evento en la pestaña Carga';
   }
@@ -839,8 +850,12 @@ db.collection('config').doc('evento').onSnapshot(doc => {
 document.getElementById('btnGuardarEvento').addEventListener('click', () => {
   const nombreEvento = document.getElementById('cfgNombre').value.trim();
   const horaCorte = document.getElementById('cfgHora').value;
+  const edadMinimaIngresada = parseInt(document.getElementById('cfgEdadMinima').value, 10);
+  const edadMinima = Number.isFinite(edadMinimaIngresada) && edadMinimaIngresada > 0
+    ? edadMinimaIngresada
+    : EDAD_MINIMA_DEFECTO;
   const fecha = new Date().toISOString().slice(0, 10);
-  db.collection('config').doc('evento').set({ nombreEvento, horaCorte, fecha }, { merge: true })
+  db.collection('config').doc('evento').set({ nombreEvento, horaCorte, edadMinima, fecha }, { merge: true })
     .then(() => {
       document.getElementById('cfgStatus').textContent = 'Evento guardado.';
       document.getElementById('cfgStatus').className = 'status-msg ok';
@@ -1436,16 +1451,17 @@ function mostrarCandidato(inv, edad, dni, score, sinDni, soloNombre) {
   let html = '';
 
   if (tipo === 'rrpp') {
+    const edadMinima = evento.edadMinima || EDAD_MINIMA_DEFECTO;
     const edadDesconocida = edad === null;
     if (edadDesconocida) {
       // calcularEdad() devolvió null por ruido en el escaneo — antes esto se trataba
       // como "NO CUMPLE +20" (falso rechazo, bug reportado por Manu el 7/9/2026).
       // Ahora se pide confirmación manual en vez de bloquear automáticamente.
-      html += `<div class="list-item"><span>Requisito +20 años</span><span class="badge badge-warn">NO SE PUDO LEER</span></div>`;
-      html += `<div class="checkline"><input type="checkbox" id="chkEdadManual"><label for="chkEdadManual" style="margin:0;">Confirmo a ojo que es mayor de 20 años (no se pudo calcular la edad del escaneo)</label></div>`;
+      html += `<div class="list-item"><span>Requisito +${edadMinima} años</span><span class="badge badge-warn">NO SE PUDO LEER</span></div>`;
+      html += `<div class="checkline"><input type="checkbox" id="chkEdadManual"><label for="chkEdadManual" style="margin:0;">Confirmo a ojo que es mayor de ${edadMinima} años (no se pudo calcular la edad del escaneo)</label></div>`;
     } else {
-      const edadOk = edad >= 20;
-      html += `<div class="list-item"><span>Requisito +20 años</span><span class="badge ${edadOk ? 'badge-ok' : 'badge-no'}">${edadOk ? 'OK' : 'NO CUMPLE'}</span></div>`;
+      const edadOk = edad >= edadMinima;
+      html += `<div class="list-item"><span>Requisito +${edadMinima} años</span><span class="badge ${edadOk ? 'badge-ok' : 'badge-no'}">${edadOk ? 'OK' : 'NO CUMPLE'}</span></div>`;
       if (!edadOk) bloqueaIngreso = true;
     }
 
