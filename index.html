@@ -135,6 +135,7 @@
   .tag { display: inline-block; font-size: 10.5px; font-weight: 600; padding: 3px 7px; border-radius: 6px; margin-left: 6px; vertical-align: middle; letter-spacing: .2px; }
   .tag-rrpp { background: var(--press); color: #CFCFCB; }
   .tag-dueno { background: var(--warnbg); color: var(--warn); }
+  .tag-encargado { background: var(--press); color: var(--ink); border: 1px solid var(--line); }
   .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
   .badge-ok { background: var(--okbg); color: var(--ok); }
   .badge-no { background: var(--badbg); color: var(--bad); }
@@ -283,7 +284,8 @@
       <label for="nuevoTipo">Tipo de lista</label>
       <select id="nuevoTipo">
         <option value="rrpp">RRPP (+20, horario, VCP/alrededores)</option>
-        <option value="dueno">Encargado (sin restricciones)</option>
+        <option value="encargado">Encargado (sin restricciones)</option>
+        <option value="dueno">Dueño (sin restricciones)</option>
       </select>
       <label for="nuevoResponsable">Responsable</label>
       <select id="nuevoResponsable"></select>
@@ -343,7 +345,7 @@ María López
       </div>
     </div>
     <div class="card">
-      <h2>Por RRPP / encargado</h2>
+      <h2>Por RRPP / encargado / dueño</h2>
       <div id="resumenPorResponsable"><div class="muted">Todavía no hay ingresos.</div></div>
     </div>
     <div class="card">
@@ -996,15 +998,22 @@ document.getElementById('btnGuardarEvento').addEventListener('click', () => {
 const RESPONSABLES_BASE = {
   rrpp: ['Agustina Avallay', 'Diego Abatte', 'Jazmin Barañano', 'Julieta Davi', 'Leonel Araujo',
          'Milagros Marta', 'Milmei Ruiz', 'Renzo Pacher', 'Valentina Gugliotti'],
-  dueno: ['Facu Fernandez', 'Manu Contreras', 'Simón']
+  encargado: ['Facu Fernandez', 'Manu Contreras'],
+  dueno: ['Simón']
 };
+const TIPOS = ['rrpp', 'encargado', 'dueno'];
+// Encargado y dueño: mismas reglas (sin control de edad/horario); toda restricción
+// del código pregunta por tipo === 'rrpp', así que un tipo nuevo hereda eso solo.
+function tagClase(t) { return t === 'rrpp' ? 'tag-rrpp' : (t === 'encargado' ? 'tag-encargado' : 'tag-dueno'); }
+function tagTexto(t) { return t === 'rrpp' ? 'RRPP' : (t === 'encargado' ? 'ENCARGADO' : 'DUEÑO'); }
+function tipoNombre(t) { return t === 'rrpp' ? 'el RRPP' : (t === 'encargado' ? 'el encargado' : 'el dueño'); }
 const OPCION_OTRO = '__otro__';
-let responsables = { rrpp: [...RESPONSABLES_BASE.rrpp], dueno: [...RESPONSABLES_BASE.dueno] };
+let responsables = Object.fromEntries(TIPOS.map(t => [t, [...RESPONSABLES_BASE[t]]]));
 
 db.collection('config').doc('responsables').onSnapshot(doc => {
   if (doc.exists) {
     const d = doc.data();
-    responsables = { rrpp: Array.isArray(d.rrpp) ? d.rrpp : [], dueno: Array.isArray(d.dueno) ? d.dueno : [] };
+    responsables = Object.fromEntries(TIPOS.map(t => [t, Array.isArray(d[t]) ? d[t] : [...RESPONSABLES_BASE[t]]]));
   }
   renderSelectResponsable();
 }, () => renderSelectResponsable());
@@ -1014,7 +1023,7 @@ function renderSelectResponsable() {
   const tipo = document.getElementById('nuevoTipo').value;
   const previo = sel.value;
   const nombres = [...(responsables[tipo] || [])].sort((a, b) => a.localeCompare(b, 'es'));
-  sel.innerHTML = '<option value="">Elegí ' + (tipo === 'rrpp' ? 'el RRPP' : 'el encargado') + '…</option>' +
+  sel.innerHTML = '<option value="">Elegí ' + tipoNombre(tipo) + '…</option>' +
     nombres.map(n => `<option value="${escapeAttr(n)}">${escapeHtml(n)}</option>`).join('') +
     `<option value="${OPCION_OTRO}">+ Agregar otro nombre…</option>`;
   if (previo && [...sel.options].some(o => o.value === previo)) sel.value = previo;
@@ -1036,11 +1045,11 @@ function responsableElegido(tipo) {
   if (!nuevo) return '';
   const existente = (responsables[tipo] || []).find(n => normalizar(n) === normalizar(nuevo));
   if (existente) return existente; // evita duplicados tipo "jaz baranano" vs "Jazmin Barañano"
-  const lista = { rrpp: [...responsables.rrpp], dueno: [...responsables.dueno] };
+  const lista = Object.fromEntries(TIPOS.map(t => [t, [...(responsables[t] || [])]]));
   lista[tipo].push(nuevo);
   responsables = lista;
   db.collection('config').doc('responsables').set(lista).catch(() => {});
-  registrarAuditoria('alta_responsable', 'Agregó a ' + nuevo + ' como ' + (tipo === 'rrpp' ? 'RRPP' : 'encargado'));
+  registrarAuditoria('alta_responsable', 'Agregó a ' + nuevo + ' como ' + tagTexto(tipo).toLowerCase());
   return nuevo;
 }
 
@@ -1213,7 +1222,7 @@ function renderPendientes() {
     const abierto = !!gruposExpandido[key];
     html += `<div class="responsable-group">
       <div class="grupo-header" data-key="${escapeAttr(key)}">
-        <h3>${escapeHtml(responsable)} <span class="tag ${tipo === 'rrpp' ? 'tag-rrpp' : 'tag-dueno'}">${tipo === 'rrpp' ? 'RRPP' : 'ENCARGADO'}</span></h3>
+        <h3>${escapeHtml(responsable)} <span class="tag ${tagClase(tipo)}">${tagTexto(tipo)}</span></h3>
         <span class="grupo-right">
           <span class="grupo-count">${items.length} ${items.length === 1 ? 'persona' : 'personas'}<span class="chevron${abierto ? ' abierto' : ''}">${SVG_CHEVRON}</span></span>
           <button class="grupo-add-btn" data-key="${escapeAttr(key)}" title="Agregar una persona a esta lista">${SVG_PLUS}</button>
@@ -1354,7 +1363,7 @@ function renderResumen() {
     return { responsable, tipo, count: counts[key] };
   }).sort((a, b) => b.count - a.count);
   cont.innerHTML = rows.map(r =>
-    `<div class="resumen-row"><span>${escapeHtml(r.responsable)} <span class="tag ${r.tipo === 'rrpp' ? 'tag-rrpp' : 'tag-dueno'}">${r.tipo === 'rrpp' ? 'RRPP' : 'ENCARGADO'}</span></span><span class="resumen-count">${r.count}</span></div>`
+    `<div class="resumen-row"><span>${escapeHtml(r.responsable)} <span class="tag ${tagClase(r.tipo)}">${tagTexto(r.tipo)}</span></span><span class="resumen-count">${r.count}</span></div>`
   ).join('');
 }
 
@@ -1441,7 +1450,7 @@ function renderHistorial() {
       let det = '';
       if (abierto) {
         det = r
-          ? (r.porResponsable.filter(x => x.ingresados).map(x => `<div class="resumen-row sub"><span>${escapeHtml(x.responsable)} <span class="tag ${x.tipo === 'rrpp' ? 'tag-rrpp' : 'tag-dueno'}">${x.tipo === 'rrpp' ? 'RRPP' : 'ENCARGADO'}</span></span><span class="resumen-count">${x.ingresados}</span></div>`).join('') || '<div class="muted">Sin ingresos.</div>')
+          ? (r.porResponsable.filter(x => x.ingresados).map(x => `<div class="resumen-row sub"><span>${escapeHtml(x.responsable)} <span class="tag ${tagClase(x.tipo)}">${tagTexto(x.tipo)}</span></span><span class="resumen-count">${x.ingresados}</span></div>`).join('') || '<div class="muted">Sin ingresos.</div>')
           : '<div class="muted">Calculando...</div>';
       }
       return `<div class="hist-noche${abierto ? ' abierta' : ''}">
@@ -1510,7 +1519,7 @@ function renderBusquedaManual() {
     return;
   }
   cont.innerHTML = results.map(p =>
-    `<div class="search-result" data-id="${p.id}">${escapeHtml(p.nombreCompleto)} <span class="tag ${p.tipo === 'rrpp' ? 'tag-rrpp' : 'tag-dueno'}">${p.tipo === 'rrpp' ? 'RRPP' : 'ENCARGADO'}</span> · ${escapeHtml(p.responsable)}</div>`
+    `<div class="search-result" data-id="${p.id}">${escapeHtml(p.nombreCompleto)} <span class="tag ${tagClase(p.tipo)}">${tagTexto(p.tipo)}</span> · ${escapeHtml(p.responsable)}</div>`
   ).join('');
   cont.querySelectorAll('.search-result').forEach(el => {
     el.addEventListener('click', () => {
@@ -1638,7 +1647,7 @@ function mostrarMultiplesCandidatos(candidatos, edad, dni) {
     `<div class="muted">DNI escaneado: <strong>${escapeHtml(dni.apellido + ' ' + dni.nombre)}</strong>${edad !== null ? ' · ' + edad + ' años' : ''}. Elegí a quién corresponde:</div>`;
   const checklistEl = document.getElementById('candidatoChecklist');
   checklistEl.innerHTML = candidatos.slice(0, 6).map((c, idx) =>
-    `<div class="search-result" data-idx="${idx}">${escapeHtml(c.p.nombreCompleto)} <span class="tag ${c.p.tipo === 'rrpp' ? 'tag-rrpp' : 'tag-dueno'}">${c.p.tipo === 'rrpp' ? 'RRPP' : 'ENCARGADO'}</span> · ${escapeHtml(c.p.responsable)}${c.soloNombre ? ' · ⚠️ solo por nombre' : ''}</div>`
+    `<div class="search-result" data-idx="${idx}">${escapeHtml(c.p.nombreCompleto)} <span class="tag ${tagClase(c.p.tipo)}">${tagTexto(c.p.tipo)}</span> · ${escapeHtml(c.p.responsable)}${c.soloNombre ? ' · ⚠️ solo por nombre' : ''}</div>`
   ).join('');
   document.getElementById('btnConfirmarIngreso').style.display = 'none';
   checklistEl.querySelectorAll('.search-result').forEach(el => {
@@ -1663,7 +1672,7 @@ function mostrarCandidato(inv, edad, dni, score, sinDni, soloNombre) {
     // y registrado en la auditoría al confirmar.
     infoEl.innerHTML = `
       <div class="list-item"><span>Nombre en lista</span><strong>${escapeHtml(inv.nombreCompleto)}</strong></div>
-      <div class="list-item"><span>Responsable</span><strong>${escapeHtml(inv.responsable)} <span class="tag ${tipo === 'rrpp' ? 'tag-rrpp' : 'tag-dueno'}">${tipo === 'rrpp' ? 'RRPP' : 'ENCARGADO'}</span></strong></div>
+      <div class="list-item"><span>Responsable</span><strong>${escapeHtml(inv.responsable)} <span class="tag ${tagClase(tipo)}">${tagTexto(tipo)}</span></strong></div>
     `;
     document.getElementById('candidatoChecklist').innerHTML =
       '<div class="status-msg err" style="text-align:left;">⚠️ No se escaneó el DNI: no hay edad ni identidad verificadas. Confirmá solo si estás seguro/a — queda registrado con tu nombre.</div>';
@@ -1674,7 +1683,7 @@ function mostrarCandidato(inv, edad, dni, score, sinDni, soloNombre) {
   infoEl.innerHTML = `
     ${soloNombre ? '<div class="status-msg err" style="text-align:left;">⚠️ Coincidencia solo por nombre (el apellido escaneado no coincidió con la lista) — confirmá bien que es la persona correcta.</div>' : ''}
     <div class="list-item"><span>Nombre en lista</span><strong>${escapeHtml(inv.nombreCompleto)}</strong></div>
-    <div class="list-item"><span>Responsable</span><strong>${escapeHtml(inv.responsable)} <span class="tag ${tipo === 'rrpp' ? 'tag-rrpp' : 'tag-dueno'}">${tipo === 'rrpp' ? 'RRPP' : 'ENCARGADO'}</span></strong></div>
+    <div class="list-item"><span>Responsable</span><strong>${escapeHtml(inv.responsable)} <span class="tag ${tagClase(tipo)}">${tagTexto(tipo)}</span></strong></div>
     ${dni && dni.apellido ? `<div class="list-item"><span>DNI escaneado</span><strong>${escapeHtml(dni.apellido + ' ' + dni.nombre)}</strong></div>` : ''}
     <div class="list-item"><span>Edad</span><strong>${edad !== null ? edad + ' años' : 'no se pudo leer'}</strong></div>
   `;
@@ -1704,7 +1713,7 @@ function mostrarCandidato(inv, edad, dni, score, sinDni, soloNombre) {
 
     html += `<div class="checkline"><input type="checkbox" id="chkVcp"><label for="chkVcp" style="margin:0;">Confirmo verbalmente que es de Carlos Paz o alrededores</label></div>`;
   } else {
-    html += `<div class="muted">Lista de encargado — sin restricciones de edad ni horario.</div>`;
+    html += `<div class="muted">Lista de ${tagTexto(tipo).toLowerCase()} — sin restricciones de edad ni horario.</div>`;
   }
   checklistEl.innerHTML = html;
 
