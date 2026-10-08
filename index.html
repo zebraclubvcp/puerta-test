@@ -998,8 +998,8 @@ document.getElementById('btnGuardarEvento').addEventListener('click', () => {
 const RESPONSABLES_BASE = {
   rrpp: ['Agustina Avallay', 'Diego Abatte', 'Jazmin Barañano', 'Julieta Davi', 'Leonel Araujo',
          'Milagros Marta', 'Milmei Ruiz', 'Renzo Pacher', 'Valentina Gugliotti'],
-  encargado: ['Facu Fernandez', 'Manu Contreras'],
-  dueno: ['Simón']
+  encargado: ['Benja Peralta', 'Facu Fernandez', 'Manu Contreras', 'Simón Callejón'],
+  dueno: ['Fabio Testi', 'Glenda Testi', 'Jonas Testi']
 };
 const TIPOS = ['rrpp', 'encargado', 'dueno'];
 // Encargado y dueño: mismas reglas (sin control de edad/horario); toda restricción
@@ -1225,7 +1225,7 @@ function renderPendientes() {
         <h3>${escapeHtml(responsable)} <span class="tag ${tagClase(tipo)}">${tagTexto(tipo)}</span></h3>
         <span class="grupo-right">
           <span class="grupo-count">${items.length} ${items.length === 1 ? 'persona' : 'personas'}<span class="chevron${abierto ? ' abierto' : ''}">${SVG_CHEVRON}</span></span>
-          <button class="grupo-add-btn" data-key="${escapeAttr(key)}" title="Agregar una persona a esta lista">${SVG_PLUS}</button>
+          <button class="grupo-add-btn" data-key="${escapeAttr(key)}" title="Agregar más nombres a esta lista">${SVG_PLUS}</button>
           <button class="grupo-del-btn" data-key="${escapeAttr(key)}" title="Borrar toda esta lista">${SVG_TRASH}</button>
         </span>
       </div>`;
