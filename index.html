@@ -293,6 +293,10 @@
         <input type="text" id="otroResponsable" placeholder="Nombre y apellido, igual que en el Excel" autocomplete="off">
         <div class="muted" style="font-size:12px;margin-top:4px;">Queda guardado en la lista para las próximas noches.</div>
       </div>
+      <div id="otroEquipoBox" style="display:none;">
+        <label for="otroEquipo">Equipo</label>
+        <select id="otroEquipo"><option value="redes">Redes</option><option value="kosmos">Kosmos</option></select>
+      </div>
       <label>Nombres (uno por línea)</label>
       <textarea id="nuevosNombres" placeholder="Juan Pérez
 María López
@@ -992,63 +996,112 @@ document.getElementById('btnGuardarEvento').addEventListener('click', () => {
 });
 
 /* ---------- Responsables (desplegable) ---------- */
-// Nombres exactos como figuran en el Excel de gastos: así el cierre de cada noche
-// cruza 1 a 1 con CALC_RRPP. Viven en config/responsables; si el doc todavía no
-// existe se usa esta lista base y se guarda la primera vez que alguien agrega un nombre.
-const RESPONSABLES_BASE = {
-  rrpp: ['Agustina Avallay', 'Diego Abatte', 'Jazmin Barañano', 'Julieta Davi', 'Leonel Araujo',
-         'Milagros Marta', 'Milmei Ruiz', 'Renzo Pacher', 'Valentina Gugliotti'],
+// Lista general compartida con App Calle: config/equipo. Los RRPP tienen equipos
+// (redes / calle / kosmos); acá solo aparecen los que hacen listas: Redes y Kosmos.
+// Nombres exactos como en el Excel de gastos, para que el cierre cruce 1 a 1.
+const EQUIPO_BASE = {
+  rrpp: [
+    { nombre: 'Renzo Pacher', equipos: ['redes'] },
+    { nombre: 'Milagros Marta', equipos: ['redes'], alpogo: 'Mili Marta' },
+    { nombre: 'Diego Abatte', equipos: ['redes'], alpogo: 'Diego Abbate' },
+    { nombre: 'Agustina Avallay', equipos: ['redes', 'calle'], alpogoPago: 'redes' },
+    { nombre: 'Julieta Davi', equipos: ['redes'], alpogo: 'Juli Davi' },
+    { nombre: 'Jazmin Barañano', equipos: ['redes'], alpogo: 'Jaz Barañano' },
+    { nombre: 'Valentina Gugliotti', equipos: ['redes'], alpogo: 'Vale Gugliotti' },
+    { nombre: 'Leonel Araujo', equipos: ['redes'], alpogo: 'Leo Araujo' },
+    { nombre: 'Milmei Ruiz', equipos: ['redes'] },
+    { nombre: 'Abril Casini', equipos: ['calle'] },
+    { nombre: 'Ivan Schnebeerger', equipos: ['calle'] },
+    { nombre: 'Pau Carena', equipos: ['calle'] },
+    { nombre: 'Yamila Minichelli', equipos: ['calle'], alpogo: 'Yami Minichelli' },
+    { nombre: 'Leandro Rodriguez', equipos: ['calle'], alpogo: 'Lean Rodriguez' },
+    { nombre: 'Juan Martin Elias', equipos: ['calle'] },
+    { nombre: 'Noah Farrer', equipos: ['kosmos'] },
+    { nombre: 'Bauti Toledo', equipos: ['kosmos'] },
+    { nombre: 'Emi Estarrona', equipos: ['kosmos'] },
+    { nombre: 'Emi Repetto', equipos: ['kosmos'] }
+  ],
   encargado: ['Facu Fernandez', 'Manu Contreras', 'Simón Callejón'],
   dueno: ['Benja Peralta', 'Fabio Testi', 'Glenda Testi', 'Jonas Testi']
 };
 const TIPOS = ['rrpp', 'encargado', 'dueno'];
+const EQUIPOS_LISTAS = [['redes', 'Redes'], ['kosmos', 'Kosmos']];
 // Encargado y dueño: mismas reglas (sin control de edad/horario); toda restricción
 // del código pregunta por tipo === 'rrpp', así que un tipo nuevo hereda eso solo.
 function tagClase(t) { return t === 'rrpp' ? 'tag-rrpp' : (t === 'encargado' ? 'tag-encargado' : 'tag-dueno'); }
 function tagTexto(t) { return t === 'rrpp' ? 'RRPP' : (t === 'encargado' ? 'ENCARGADO' : 'DUEÑO'); }
 function tipoNombre(t) { return t === 'rrpp' ? 'el RRPP' : (t === 'encargado' ? 'el encargado' : 'el dueño'); }
 const OPCION_OTRO = '__otro__';
-let responsables = Object.fromEntries(TIPOS.map(t => [t, [...RESPONSABLES_BASE[t]]]));
+let equipo = JSON.parse(JSON.stringify(EQUIPO_BASE));
 
-db.collection('config').doc('responsables').onSnapshot(doc => {
+db.collection('config').doc('equipo').onSnapshot(doc => {
   if (doc.exists) {
     const d = doc.data();
-    responsables = Object.fromEntries(TIPOS.map(t => [t, Array.isArray(d[t]) ? d[t] : [...RESPONSABLES_BASE[t]]]));
+    equipo = {
+      rrpp: Array.isArray(d.rrpp) ? d.rrpp : EQUIPO_BASE.rrpp,
+      encargado: Array.isArray(d.encargado) ? d.encargado : EQUIPO_BASE.encargado,
+      dueno: Array.isArray(d.dueno) ? d.dueno : EQUIPO_BASE.dueno
+    };
   }
   renderSelectResponsable();
 }, () => renderSelectResponsable());
 
+function rrppDeEquipo(eq) {
+  return (equipo.rrpp || []).filter(p => (p.equipos || []).includes(eq)).map(p => p.nombre)
+    .sort((a, b) => a.localeCompare(b, 'es'));
+}
 function renderSelectResponsable() {
   const sel = document.getElementById('nuevoResponsable');
   const tipo = document.getElementById('nuevoTipo').value;
   const previo = sel.value;
-  const nombres = [...(responsables[tipo] || [])].sort((a, b) => a.localeCompare(b, 'es'));
-  sel.innerHTML = '<option value="">Elegí ' + tipoNombre(tipo) + '…</option>' +
-    nombres.map(n => `<option value="${escapeAttr(n)}">${escapeHtml(n)}</option>`).join('') +
+  const opt = n => `<option value="${escapeAttr(n)}">${escapeHtml(n)}</option>`;
+  let cuerpo;
+  if (tipo === 'rrpp') {
+    cuerpo = EQUIPOS_LISTAS.map(([eq, label]) => {
+      const ns = rrppDeEquipo(eq);
+      return ns.length ? `<optgroup label="${label}">${ns.map(opt).join('')}</optgroup>` : '';
+    }).join('');
+  } else {
+    cuerpo = [...(equipo[tipo] || [])].sort((a, b) => a.localeCompare(b, 'es')).map(opt).join('');
+  }
+  sel.innerHTML = '<option value="">Elegí ' + tipoNombre(tipo) + '…</option>' + cuerpo +
     `<option value="${OPCION_OTRO}">+ Agregar otro nombre…</option>`;
   if (previo && [...sel.options].some(o => o.value === previo)) sel.value = previo;
   toggleOtroResponsable();
 }
 function toggleOtroResponsable() {
   const otro = document.getElementById('nuevoResponsable').value === OPCION_OTRO;
+  const esRrpp = document.getElementById('nuevoTipo').value === 'rrpp';
   document.getElementById('otroResponsableBox').style.display = otro ? '' : 'none';
+  document.getElementById('otroEquipoBox').style.display = (otro && esRrpp) ? '' : 'none';
   if (otro) document.getElementById('otroResponsable').focus();
 }
 document.getElementById('nuevoTipo').addEventListener('change', renderSelectResponsable);
 document.getElementById('nuevoResponsable').addEventListener('change', toggleOtroResponsable);
 
-// Devuelve el nombre elegido; si es uno nuevo lo suma a la lista guardada.
+// Devuelve el nombre elegido; si es uno nuevo lo suma a la lista general.
 function responsableElegido(tipo) {
   const sel = document.getElementById('nuevoResponsable').value;
   if (sel !== OPCION_OTRO) return sel;
   const nuevo = document.getElementById('otroResponsable').value.trim().replace(/\s+/g, ' ');
   if (!nuevo) return '';
-  const existente = (responsables[tipo] || []).find(n => normalizar(n) === normalizar(nuevo));
-  if (existente) return existente; // evita duplicados tipo "jaz baranano" vs "Jazmin Barañano"
-  const lista = Object.fromEntries(TIPOS.map(t => [t, [...(responsables[t] || [])]]));
-  lista[tipo].push(nuevo);
-  responsables = lista;
-  db.collection('config').doc('responsables').set(lista).catch(() => {});
+  const lista = JSON.parse(JSON.stringify(equipo));
+  if (tipo === 'rrpp') {
+    const eq = document.getElementById('otroEquipo').value;
+    const p = lista.rrpp.find(x => normalizar(x.nombre) === normalizar(nuevo));
+    if (p && (p.equipos || []).includes(eq)) return p.nombre; // ya estaba: evita duplicados
+    if (p) p.equipos = [...(p.equipos || []), eq];
+    else lista.rrpp.push({ nombre: nuevo, equipos: [eq] });
+    registrarAuditoria('alta_responsable', 'Agregó a ' + (p ? p.nombre : nuevo) + ' como RRPP de ' + eq);
+    equipo = lista;
+    db.collection('config').doc('equipo').set(lista).catch(() => {});
+    return p ? p.nombre : nuevo;
+  }
+  const existente = (lista[tipo] || []).find(n => normalizar(n) === normalizar(nuevo));
+  if (existente) return existente;
+  lista[tipo] = [...(lista[tipo] || []), nuevo];
+  equipo = lista;
+  db.collection('config').doc('equipo').set(lista).catch(() => {});
   registrarAuditoria('alta_responsable', 'Agregó a ' + nuevo + ' como ' + tagTexto(tipo).toLowerCase());
   return nuevo;
 }
