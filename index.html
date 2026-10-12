@@ -68,7 +68,7 @@
   .card.bloqueada { opacity: .5; }
 
   label { display: block; font-size: 13px; color: var(--ink2); margin: 12px 0 6px; font-weight: 500; }
-  input[type=text], input[type=time], input[type=date], input[type=number], select, textarea {
+  input[type=text], input[type=password], input[type=time], input[type=date], input[type=number], select, textarea {
     width: 100%; min-height: 48px; padding: 11px 13px;
     border: 1px solid var(--edge); border-radius: 12px;
     font-size: 16px; font-family: inherit;
@@ -106,7 +106,36 @@
     .btn-link:hover { color: var(--ink); }
   }
 
-  video { width: 100%; aspect-ratio: 16 / 5; object-fit: cover; border-radius: 14px; background: #000; display: block; margin-top: 4px; }
+  /* Visor fino (franja) con marco guía. El lector analiza SOLO lo que está dentro del marco
+     (más un margen), así lo que ve el de la puerta es lo que se lee. */
+  .visor { position: relative; width: 100%; aspect-ratio: 16 / 5; border-radius: 14px; overflow: hidden; background: #000; margin-top: 4px; }
+  .visor video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+  .visor .marco { position: absolute; left: 6%; right: 6%; top: 12%; bottom: 12%; border-radius: 8px; pointer-events: none; transition: box-shadow .15s ease; }
+  .visor .marco i { position: absolute; width: 22px; height: 22px; border: 3px solid var(--ink); }
+  .visor .marco i:nth-child(1) { left: 0; top: 0; border-right: 0; border-bottom: 0; border-top-left-radius: 8px; }
+  .visor .marco i:nth-child(2) { right: 0; top: 0; border-left: 0; border-bottom: 0; border-top-right-radius: 8px; }
+  .visor .marco i:nth-child(3) { left: 0; bottom: 0; border-right: 0; border-top: 0; border-bottom-left-radius: 8px; }
+  .visor .marco i:nth-child(4) { right: 0; bottom: 0; border-left: 0; border-top: 0; border-bottom-right-radius: 8px; }
+  .visor.leido .marco { box-shadow: 0 0 0 999px rgba(127,191,143,.28); }
+  .visor.leido .marco i { border-color: var(--ok); }
+  .visor-hint { font-size: 12.5px; color: var(--ink2); text-align: center; margin-top: 6px; line-height: 1.4; }
+  .manual-box { margin-top: 4px; }
+  .manual-box .row input { text-align: center; }
+  .metodo-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .metodo-row .badge { background: var(--press); color: var(--ink2); }
+  .intento { border-bottom: 1px solid var(--line); padding: 12px 0; }
+  .intento:last-child { border-bottom: none; }
+  .intento-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .intento-nom { font-weight: 600; font-size: 15px; min-width: 0; }
+  .intento-hora { font-size: 12.5px; color: var(--ink3); white-space: nowrap; }
+  .intento-det { font-size: 13.5px; color: var(--ink2); margin-top: 4px; line-height: 1.45; }
+  .intento-acc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .intento-acc button { flex: 1; }
+  .intento-acc .acc-main { flex-basis: 100%; background: var(--ink); color: var(--bg); border: none; }
+  .intento.resuelto { opacity: .55; }
+  .filtro-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .filtro-row button { width: auto; min-height: 36px; padding: 0 12px; font-size: 13px; border-radius: 999px; border: 1px solid var(--edge); background: none; color: var(--ink2); margin: 0; }
+  .filtro-row button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
   .row { display: flex; gap: 10px; }
   .row > * { flex: 1; min-width: 0; }
 
@@ -320,18 +349,57 @@ María López
   <div class="view" id="view-puerta">
     <div class="card" id="puertaScanCard">
       <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Fiscalizar ingreso</h2>
-      <video id="video" muted playsinline style="display:none;"></video>
+      <div class="visor" id="visor" style="display:none;">
+        <video id="video" muted playsinline autoplay></video>
+        <div class="marco" id="marco"><i></i><i></i><i></i><i></i></div>
+      </div>
+      <div class="visor-hint" id="visorHint" style="display:none;">Poné el código de atrás del DNI dentro del marco. DNI nuevo (con QR): alejalo hasta que el QR entre.</div>
+      <button class="btn-secondary" id="btnNoLee" style="display:none;">¿No lee? Cargar DNI a mano</button>
       <button class="btn-primary" id="btnEscanear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Escanear DNI</button>
       <button class="btn-secondary" id="btnTorch" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span id="btnTorchLabel">Linterna</span></button>
-      <button class="btn-secondary" id="btnBuscarManual"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Buscar por nombre</button>
-      <button class="btn-secondary" id="btnSinDni"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Ingresar sin DNI (olvidado)</button>
+      <button class="btn-secondary" id="btnBuscarManual"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Buscar por nombre o RRPP</button>
+      <button class="btn-secondary" id="btnManual"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="6" y1="10" x2="12" y2="10"/><line x1="6" y1="14" x2="10" y2="14"/></svg>Cargar DNI a mano</button>
       <div id="buscarManualBox" style="display:none;">
         <div class="status-msg" id="buscarManualModoLabel"></div>
-        <label>Nombre</label>
-        <input type="text" id="inputBuscar" placeholder="Escribí para buscar...">
+        <label for="inputBuscar">Nombre o RRPP</label>
+        <input type="text" id="inputBuscar" placeholder="Escribí para buscar..." autocomplete="off">
         <div id="resultadosBusqueda"></div>
       </div>
       <div class="status-msg" id="scanStatus"></div>
+    </div>
+
+    <div class="card" id="manualCard" style="display:none;">
+      <h2>DNI a mano</h2>
+      <div class="muted" style="text-align:left;" id="manualPara"></div>
+      <div id="manualDatosBox" class="manual-box">
+        <label for="manualDni">Número de DNI</label>
+        <input type="text" id="manualDni" inputmode="numeric" maxlength="10" placeholder="Sin puntos" autocomplete="off">
+        <label>Fecha de nacimiento</label>
+        <div class="row">
+          <input type="text" id="manualDia" inputmode="numeric" maxlength="2" placeholder="DD" autocomplete="off">
+          <input type="text" id="manualMes" inputmode="numeric" maxlength="2" placeholder="MM" autocomplete="off">
+          <input type="text" id="manualAnio" inputmode="numeric" maxlength="4" placeholder="AAAA" autocomplete="off">
+        </div>
+        <button class="btn-primary" id="btnManualVerificar">Verificar</button>
+        <div class="nueva-noche-links"><button type="button" class="btn-link" id="btnMostrarAutoriz">No tiene DNI encima</button></div>
+      </div>
+      <div id="autorizBox" class="manual-box" style="display:none;">
+        <div class="nueva-aviso">Sin DNI no se puede controlar la edad. Lo autoriza un encargado con su PIN y queda registrado.</div>
+        <label for="autorizMotivo">Motivo</label>
+        <select id="autorizMotivo">
+          <option value="">Elegí el motivo…</option>
+          <option value="Olvidó el DNI">Olvidó el DNI</option>
+          <option value="DNI dañado o ilegible">DNI dañado o ilegible</option>
+          <option value="otro">Otro</option>
+        </select>
+        <input type="text" id="autorizOtro" placeholder="Contá el motivo" style="display:none;margin-top:8px;" autocomplete="off">
+        <label for="autorizPin">PIN del encargado</label>
+        <input type="password" id="autorizPin" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="----" autocomplete="off">
+        <button class="btn-primary" id="btnAutorizar">Autorizar ingreso</button>
+        <div class="nueva-noche-links"><button type="button" class="btn-link" id="btnVolverDatos">Volver a cargar el DNI</button></div>
+      </div>
+      <div class="status-msg" id="manualStatus"></div>
+      <button class="btn-secondary" id="btnManualCancelar">Cancelar</button>
     </div>
 
     <div class="card" id="candidatoCard" style="display:none;">
@@ -350,6 +418,7 @@ María López
         <div class="n" id="totalIngresado">0</div>
         <div class="l">Total ingresado</div>
       </div>
+      <div class="metodo-row" id="metodoRow"></div>
     </div>
     <div class="card">
       <h2>Por RRPP / encargado / dueño</h2>
@@ -364,6 +433,23 @@ María López
     <div class="card">
       <h2>Noches anteriores</h2>
       <div id="listaHistorial"><div class="muted">Cargando...</div></div>
+    </div>
+  </div>
+
+  <!-- VISTA REVISAR (admin y carga): rechazos y errores de la puerta, para acreditar después -->
+  <div class="view" id="view-revisar">
+    <div class="card">
+      <h2>Revisar ingresos</h2>
+      <div class="muted" style="text-align:left;">Todo lo que la puerta no pudo confirmar. Si el cliente cumplía, acreditalo a su lista y el RRPP no pierde la comisión.</div>
+      <label for="revisarNoche">Noche</label>
+      <select id="revisarNoche"></select>
+      <div class="filtro-row" id="revisarFiltros">
+        <button type="button" class="on" data-f="pendiente">Pendientes</button>
+        <button type="button" data-f="todos">Todos</button>
+      </div>
+    </div>
+    <div class="card">
+      <div id="listaIntentos"><div class="muted">Cargando...</div></div>
     </div>
   </div>
 
@@ -398,6 +484,7 @@ María López
   <button class="tab-btn active" data-view="carga"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/></svg></span>Carga</button>
   <button class="tab-btn" data-view="puerta"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="1.5"/><circle cx="15" cy="12" r="1"/></svg></span>Puerta</button>
   <button class="tab-btn" data-view="resumen"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg></span>Resumen</button>
+  <button class="tab-btn" data-view="revisar"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>Revisar</button>
   <button class="tab-btn" data-view="usuarios" id="tabUsuariosBtn"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/></svg></span>Usuarios</button>
 </div>
 
@@ -422,6 +509,8 @@ María López
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <!-- ZXing para escaneo de DNI (PDF417) -->
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
+<!-- jsQR para el QR del DNI electrónico nuevo (ZXing falla con algunos QR grandes, probado 12/10/2026) -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- pdf.js para importar listas desde PDF -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
@@ -564,19 +653,83 @@ function excedeHorario(horaCorteStr) {
   return nowMin > corteMin;
 }
 
-function parseDniPdf417(raw) {
-  const parts = raw.split('@');
-  return {
-    tramite: parts[0] || '',
-    apellido: parts[1] || '',
-    nombre: parts[2] || '',
-    sexo: parts[3] || '',
-    dni: parts[4] || '',
-    ejemplar: parts[5] || '',
-    fechaNacimiento: parts[6] || '',
-    fechaEmision: parts[7] || '',
+/* ---------- Lectura del código del DNI (3 formatos) ----------
+   Los campos se reconocen por su FORMA (número de 7-9 dígitos, fecha, sexo M/F/X, nombre solo
+   con letras), no por su posición fija. Si la lectura vino con basura (pasaba en ~11% de los
+   escaneos: apellido con símbolos, número con letras) devuelve null y el visor sigue leyendo,
+   en vez de mostrar datos rotos.
+   - PDF417 tarjeta 2012+:  tramite@APELLIDO@NOMBRE@SEXO@DNI@EJEMPLAR@DD/MM/AAAA@EMISION[@CUIL]
+   - PDF417 tarjeta 2009-12: @DNI@EJEMPLAR@..@APELLIDO@NOMBRE@NACIONALIDAD@DD/MM/AAAA@SEXO@... (14+ campos)
+   - QR DNI electrónico:    tramite@APELLIDO@NOMBRES@DNI@EJEMPLAR@DD/MM/AA@DD/MM/AA@<firma JWT>
+     (no trae sexo y el año viene con 2 dígitos). */
+const RE_NOMBRE_DNI = /^[A-ZÁÉÍÓÚÜÑÀÈÌÒÙÂÊÎÔÛÄËÏÖÇ' .\-]{2,60}$/;
+function esNombreValido(s) { return RE_NOMBRE_DNI.test((s || '').trim().toUpperCase()); }
+function esNumeroDni(s) { return /^\d{6,9}$/.test((s || '').trim()); }
+function esSexo(s) { return /^[MFX]$/.test((s || '').trim().toUpperCase()); }
+function fechaValida(s) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec((s || '').trim());
+  if (!m) return false;
+  const d = Number(m[1]), mo = Number(m[2]), y = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return false;
+  const anioActual = new Date().getFullYear();
+  return y >= 1900 && y <= anioActual;
+}
+// DD/MM/AA → DD/MM/AAAA. Nadie nace en el futuro: si 20AA es posterior a este año, es 19AA.
+function expandirAnio(s) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{2})$/.exec((s || '').trim());
+  if (!m) return (s || '').trim();
+  const yy = Number(m[3]), actual = new Date().getFullYear();
+  return m[1] + '/' + m[2] + '/' + (2000 + yy <= actual ? 2000 + yy : 1900 + yy);
+}
+function datosDni(formato, apellido, nombre, dni, fechaNacimiento, sexo, raw) {
+  const r = {
+    formato,
+    apellido: (apellido || '').trim().toUpperCase(),
+    nombre: (nombre || '').trim().toUpperCase(),
+    dni: (dni || '').trim(),
+    fechaNacimiento: (fechaNacimiento || '').trim(),
+    sexo: (sexo || '').trim().toUpperCase(),
     raw
   };
+  if (!esNombreValido(r.apellido) || !esNombreValido(r.nombre)) return null;
+  if (!esNumeroDni(r.dni) || !fechaValida(r.fechaNacimiento)) return null;
+  return r;
+}
+function parseDni(raw) {
+  const t = (raw || '').trim();
+  if (!t.includes('@')) return null;
+  const p = t.split('@').map(s => s.trim());
+  // QR del DNI electrónico: DNI en el 4° campo, ejemplar letra en el 5°, fechas con año corto
+  if (p.length >= 7 && esNumeroDni(p[3]) && /^[A-Z]$/i.test(p[4]) && /^\d{2}\/\d{2}\/\d{2}$/.test(p[5])) {
+    let nac = expandirAnio(p[5]);
+    const emi = expandirAnio(p[6]);
+    // con año de 2 dígitos, un nacimiento posterior a la emisión es del siglo anterior
+    if (fechaValida(nac) && fechaValida(emi) && Number(nac.slice(6)) > Number(emi.slice(6))) nac = nac.slice(0, 6) + (Number(nac.slice(6)) - 100);
+    const r = datosDni('qr', p[1], p[2], p[3], nac, '', t);
+    if (r) return r;
+  }
+  // Tarjeta 2009-2012 (empieza con @ y tiene muchos campos)
+  if (p.length >= 14 && esNumeroDni(p[1])) {
+    const r = datosDni('pdf417_viejo', p[4], p[5], p[1], p[7], p[8], t);
+    if (r) return r;
+  }
+  // Tarjeta 2012+ en su lugar normal
+  if (p.length >= 8) {
+    const r = datosDni('pdf417', p[1], p[2], p[4], p[6], p[3], t);
+    if (r) return r;
+  }
+  // Rescate por forma: a veces un "@" se lee mal y los campos quedan corridos. Se busca la
+  // secuencia SEXO @ DNI @ EJEMPLAR @ FECHA y se toma nombre y apellido de los 2 campos previos
+  // (al apellido se le sacan números pegados del trámite).
+  for (let i = 1; i + 3 < p.length; i++) {
+    if (esSexo(p[i]) && esNumeroDni(p[i + 1]) && fechaValida(p[i + 3])) {
+      const nombre = p[i - 1];
+      const apellido = (i >= 2 ? p[i - 2] : '').replace(/^[^A-ZÁÉÍÓÚÜÑ]+/i, '');
+      const r = datosDni('pdf417', apellido, nombre, p[i + 1], p[i + 3], p[i], t);
+      if (r) return r;
+    }
+  }
+  return null;
 }
 
 /* ---------- Tabs ---------- */
@@ -588,16 +741,21 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.getElementById('view-' + btn.dataset.view).classList.add('active');
     if (btn.dataset.view === 'usuarios') { renderUsuarios(); renderAuditoria(); }
     if (btn.dataset.view === 'resumen') renderHistorial();
+    if (btn.dataset.view === 'revisar') abrirRevisar();
+    if (btn.dataset.view !== 'puerta') detenerEscaneo();
   });
 });
 
 /* ---------- Login por PIN + roles ---------- */
 // Roles: "carga" ve solo Carga; "puerta" ve Puerta+Resumen; "admin" ve todo + Usuarios.
+// "revisar" = bandeja de rechazos/errores de la puerta para acreditar después (admin y carga).
 const PERMISOS_POR_ROL = {
-  carga: ['carga'],
+  carga: ['carga', 'revisar'],
   puerta: ['puerta', 'resumen'],
-  admin: ['carga', 'puerta', 'resumen', 'usuarios']
+  admin: ['carga', 'puerta', 'resumen', 'revisar', 'usuarios']
 };
+// Roles cuyo PIN autoriza un ingreso sin DNI (encargados: Manu/Simón son admin, Facu es carga).
+const ROLES_AUTORIZAN = ['admin', 'carga'];
 let sesion = null; // { id, nombre, rol }
 
 function etiquetaRol(rol) {
@@ -643,6 +801,7 @@ function aplicarSesion() {
     document.getElementById('view-' + primero).classList.add('active');
     if (primero === 'usuarios') { renderUsuarios(); renderAuditoria(); }
     if (primero === 'resumen') renderHistorial();
+    if (primero === 'revisar') abrirRevisar();
   }
   migrarSiHaceFalta();
 }
@@ -712,6 +871,45 @@ function registrarAuditoria(accion, detalle) {
     accion, detalle,
     usuario: sesion ? sesion.nombre : '—',
     rol: sesion ? sesion.rol : '—',
+    creadoEn: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(() => {});
+}
+
+/* ---------- Registro de intentos que NO terminaron en ingreso ----------
+   Antes, "no aparece", "no cumple edad", "fuera de horario", un error al guardar o un
+   cancelar no dejaban rastro: si el cliente cumplía, el RRPP perdía la comisión y nadie
+   se enteraba. Ahora cada uno queda en "intentos" y se revisa en la pestaña Revisar. */
+const TIPOS_INTENTO = {
+  no_aparece: 'No aparece en ninguna lista',
+  no_cumple_edad: 'No cumple la edad',
+  fuera_horario: 'Fuera de horario',
+  cancelado: 'Se canceló sin confirmar',
+  error_guardado: 'Error al guardar el ingreso',
+  lectura_fallida: 'El DNI no se pudo leer'
+};
+function registrarIntento(tipo, datos) {
+  if (!eventoId) return;
+  const d = datos || {};
+  const inv = d.invitado || null;
+  const dni = d.dni || null;
+  db.collection('intentos').add({
+    eventoId,
+    tipo,
+    hora: Date.now(),
+    puerta: sesion ? sesion.nombre : null,
+    dniApellido: dni && dni.apellido ? dni.apellido : null,
+    dniNombre: dni && dni.nombre ? dni.nombre : null,
+    dni: dni && dni.dni ? dni.dni : null,
+    metodo: d.metodo || null,
+    edad: (d.edad === 0 || d.edad) ? d.edad : null,
+    candidatoId: inv ? inv.id : null,
+    candidatoNombre: inv ? inv.nombreCompleto : null,
+    responsable: inv ? inv.responsable : null,
+    tipoLista: inv ? inv.tipo : null,
+    detalle: d.detalle || null,
+    // texto crudo solo cuando el código no se pudo entender (para corregir el lector); se borra al revisar
+    crudo: d.crudo ? String(d.crudo).slice(0, 600) : null,
+    estado: 'pendiente',
     creadoEn: firebase.firestore.FieldValue.serverTimestamp()
   }).catch(() => {});
 }
@@ -948,6 +1146,19 @@ function datosFormEvento() {
 }
 
 // Resumen de una noche por responsable: lo que después lee la carga al Excel de gastos.
+// Cómo entró cada uno: escaneo, DNI a mano, sin DNI (autorizado) o acreditado desde Revisar.
+// Los ingresos viejos no tienen "metodo": sinDni=true era el "sin DNI" de antes.
+function metodoDe(i) {
+  if (i.metodo) return i.metodo;
+  return i.sinDni ? 'sin_datos' : 'escaneo';
+}
+const METODO_TXT = { escaneo: 'Escaneo', manual: 'DNI a mano', sin_datos: 'Sin DNI', acreditado: 'Acreditados' };
+function contarMetodos(lista) {
+  const c = { escaneo: 0, manual: 0, sin_datos: 0, acreditado: 0 };
+  lista.filter(i => i.estado === 'ingresado').forEach(i => { const m = metodoDe(i); c[m] = (c[m] || 0) + 1; });
+  return c;
+}
+
 function armarResumen(lista) {
   const por = {};
   lista.forEach(i => {
@@ -961,6 +1172,7 @@ function armarResumen(lista) {
     total: lista.filter(i => i.estado === 'ingresado').length,
     cargados: lista.length,
     sinDni: lista.filter(i => i.estado === 'ingresado' && i.sinDni).length,
+    porMetodo: contarMetodos(lista),
     porResponsable,
     calculadoEn: Date.now()
   };
@@ -1404,6 +1616,9 @@ function escapeAttr(str) {
 function renderResumen() {
   const ingresados = invitados.filter(i => i.estado === 'ingresado');
   document.getElementById('totalIngresado').textContent = ingresados.length;
+  const met = contarMetodos(invitados);
+  document.getElementById('metodoRow').innerHTML = Object.keys(METODO_TXT).filter(k => met[k])
+    .map(k => `<span class="badge">${METODO_TXT[k]} ${met[k]}</span>`).join('');
   const cont = document.getElementById('resumenPorResponsable');
   if (!ingresados.length) {
     cont.innerHTML = '<div class="muted">Todavía no hay ingresos.</div>';
@@ -1449,6 +1664,9 @@ function generarTextoResumen() {
     });
   }
   txt += '\nTOTAL: ' + ingresados.length;
+  const met = contarMetodos(invitados);
+  const det = Object.keys(METODO_TXT).filter(k => met[k]).map(k => METODO_TXT[k] + ' ' + met[k]);
+  if (det.length) txt += '\n(' + det.join(' · ') + ')';
   return txt;
 }
 
@@ -1531,112 +1749,371 @@ function renderHistorial() {
   }).catch(() => { cont.innerHTML = '<div class="muted">No se pudo cargar el historial.</div>'; });
 }
 
-/* ---------- Búsqueda manual (fallback) + ingreso sin DNI ---------- */
+/* ---------- Búsqueda por nombre o por RRPP ---------- */
 // modoBusquedaManual decide qué pasa al tocar un resultado:
-// "con_dni" (default): hay que escanear el DNI igual para confirmar edad/identidad.
-// "sin_dni": se salta el escaneo por completo (persona sin DNI encima) — sin verificar nada,
-// a criterio del fiscalizador; queda registrado en la auditoría al confirmar.
+// "con_dni" (default): después hay que escanear el DNI para confirmar edad/identidad.
+// "manual": se carga el DNI a mano (número + fecha de nacimiento) y la app controla igual.
 let modoBusquedaManual = 'con_dni';
 
 function abrirBusquedaManual(modo) {
   modoBusquedaManual = modo;
-  const box = document.getElementById('buscarManualBox');
-  box.style.display = 'block';
+  document.getElementById('buscarManualBox').style.display = 'block';
   const label = document.getElementById('buscarManualModoLabel');
-  if (modo === 'sin_dni') {
-    label.textContent = '⚠️ Elegí a la persona: vas a confirmar su ingreso SIN escanear el DNI.';
-    label.className = 'status-msg err';
-  } else {
-    label.textContent = 'Elegí a la persona y después escaneá su DNI para confirmar.';
-    label.className = 'status-msg';
-  }
+  label.textContent = modo === 'manual'
+    ? 'Elegí a la persona y después cargá su DNI a mano.'
+    : 'Elegí a la persona y después escaneá su DNI para confirmar.';
+  label.className = 'status-msg';
   renderBusquedaManual();
+  document.getElementById('inputBuscar').focus();
 }
 document.getElementById('btnBuscarManual').addEventListener('click', () => {
   const box = document.getElementById('buscarManualBox');
   if (box.style.display === 'block' && modoBusquedaManual === 'con_dni') { box.style.display = 'none'; return; }
   abrirBusquedaManual('con_dni');
 });
-document.getElementById('btnSinDni').addEventListener('click', () => {
+document.getElementById('btnManual').addEventListener('click', () => {
+  // si ya se eligió a alguien para escanear y no lee, se carga a mano para esa misma persona
+  if (preseleccion) { abrirManual(preseleccion); return; }
   const box = document.getElementById('buscarManualBox');
-  if (box.style.display === 'block' && modoBusquedaManual === 'sin_dni') { box.style.display = 'none'; return; }
-  abrirBusquedaManual('sin_dni');
+  if (box.style.display === 'block' && modoBusquedaManual === 'manual') { box.style.display = 'none'; return; }
+  detenerEscaneo();
+  abrirBusquedaManual('manual');
+});
+document.getElementById('btnNoLee').addEventListener('click', () => {
+  if (preseleccion) { abrirManual(preseleccion); return; }
+  detenerEscaneo();
+  abrirBusquedaManual('manual');
 });
 document.getElementById('inputBuscar').addEventListener('input', renderBusquedaManual);
+
+// Encuentra pendientes por nombre del invitado O por nombre del RRPP/responsable
+// (ej: "juli" o "davi" muestra también toda la lista de Julieta Davi).
+function buscarPendientes(lista, qNorm) {
+  const pend = lista.filter(i => i.estado === 'pendiente');
+  const porNombre = pend.filter(p => normalizar(p.nombreCompleto).includes(qNorm));
+  const ids = new Set(porNombre.map(p => p.id));
+  const porResp = pend.filter(p => !ids.has(p.id) && normalizar(p.responsable).includes(qNorm))
+    .sort((a, b) => a.responsable.localeCompare(b.responsable, 'es') || a.nombreCompleto.localeCompare(b.nombreCompleto, 'es'));
+  return { porNombre: porNombre.slice(0, 8), porResp: porResp.slice(0, 60) };
+}
+function htmlResultado(p) {
+  return `<div class="search-result" data-id="${p.id}">${escapeHtml(p.nombreCompleto)} <span class="tag ${tagClase(p.tipo)}">${tagTexto(p.tipo)}</span> · ${escapeHtml(p.responsable)}</div>`;
+}
+function htmlResultados(res) {
+  let html = res.porNombre.map(htmlResultado).join('');
+  if (res.porResp.length) {
+    let ultimo = null;
+    res.porResp.forEach(p => {
+      if (p.responsable !== ultimo) {
+        html += `<div class="muted" style="text-align:left;margin-top:12px;">Lista de ${escapeHtml(p.responsable)}</div>`;
+        ultimo = p.responsable;
+      }
+      html += htmlResultado(p);
+    });
+  }
+  return html;
+}
 
 function renderBusquedaManual() {
   const q = normalizar(document.getElementById('inputBuscar').value);
   const cont = document.getElementById('resultadosBusqueda');
   if (!q) { cont.innerHTML = ''; return; }
-  const pendientes = invitados.filter(i => i.estado === 'pendiente');
-  const results = pendientes.filter(p => normalizar(p.nombreCompleto).includes(q)).slice(0, 8);
-  if (!results.length) {
+  const res = buscarPendientes(invitados, q);
+  if (!res.porNombre.length && !res.porResp.length) {
     cont.innerHTML = '<div class="muted" style="margin-top:6px;">Sin coincidencias.</div>';
     return;
   }
-  cont.innerHTML = results.map(p =>
-    `<div class="search-result" data-id="${p.id}">${escapeHtml(p.nombreCompleto)} <span class="tag ${tagClase(p.tipo)}">${tagTexto(p.tipo)}</span> · ${escapeHtml(p.responsable)}</div>`
-  ).join('');
+  cont.innerHTML = htmlResultados(res);
   cont.querySelectorAll('.search-result').forEach(el => {
     el.addEventListener('click', () => {
       const inv = invitados.find(i => i.id === el.dataset.id);
+      if (!inv) return;
       document.getElementById('buscarManualBox').style.display = 'none';
-      if (modoBusquedaManual === 'sin_dni') {
-        mostrarCandidato(inv, null, null, 1, true);
+      document.getElementById('inputBuscar').value = '';
+      cont.innerHTML = '';
+      if (modoBusquedaManual === 'manual') {
+        abrirManual(inv);
       } else {
-        document.getElementById('scanStatus').textContent = 'Seleccionado: ' + inv.nombreCompleto + '. Ahora escaneá su DNI para confirmar identidad y edad.';
-        document.getElementById('scanStatus').className = 'status-msg';
-        preseleccion = inv; // se completará con el escaneo
+        setScanStatus('Seleccionado: ' + inv.nombreCompleto + '. Ahora escaneá su DNI.');
+        preseleccion = inv; // se completa con el escaneo
         iniciarEscaneo();
       }
     });
   });
 }
 
-/* ---------- Escaneo DNI (ZXing) ---------- */
-let preseleccion = null; // invitado elegido manualmente, pendiente de escaneo
-const { BrowserMultiFormatReader, BarcodeFormat, DecodeHintType } = ZXing;
-const hints = new Map();
-hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.PDF_417]);
-const reader = new BrowserMultiFormatReader(hints);
-let currentStream = null;
+function setScanStatus(txt, clase) {
+  const el = document.getElementById('scanStatus');
+  el.textContent = txt || '';
+  el.className = 'status-msg' + (clase ? ' ' + clase : '');
+}
 
-document.getElementById('btnEscanear').addEventListener('click', () => { preseleccion = null; iniciarEscaneo(); });
+/* ---------- DNI a mano (reemplaza "Ingresar sin DNI") ---------- */
+// La puerta escribe número y fecha de nacimiento: la app controla edad y horario igual que
+// con el escaneo. Si la persona no tiene DNI encima, solo entra con el PIN de un encargado y
+// un motivo (antes "sin DNI" salteaba todos los controles: 95 de 347 ingresos el 10/10).
+let manualInv = null;
 
-function iniciarEscaneo() {
-  const video = document.getElementById('video');
-  const statusEl = document.getElementById('scanStatus');
-  video.style.display = 'block';
-  statusEl.textContent = 'Pidiendo acceso a la cámara...';
-  statusEl.className = 'status-msg';
-
-  reader.decodeFromConstraints(
-    { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-    video,
-    (result, err) => {
-      if (result) {
-        const parsed = parseDniPdf417(result.getText());
-        onDniEscaneado(parsed);
-      }
-    }
-  ).then(() => {
-    statusEl.textContent = 'Cámara activa. Apuntá al código de barras de atrás del DNI.';
-    currentStream = video.srcObject;
-    activarLinterna();
-  }).catch(e => {
-    statusEl.textContent = 'Error al acceder a la cámara: ' + e.message;
-    statusEl.className = 'status-msg err';
+function abrirManual(inv) {
+  detenerEscaneo();
+  manualInv = inv;
+  preseleccion = null;
+  document.getElementById('buscarManualBox').style.display = 'none';
+  document.getElementById('candidatoCard').style.display = 'none';
+  document.getElementById('manualPara').innerHTML = 'Para: <strong>' + escapeHtml(inv.nombreCompleto) + '</strong> · ' + escapeHtml(inv.responsable) + ` <span class="tag ${tagClase(inv.tipo)}">${tagTexto(inv.tipo)}</span>`;
+  ['manualDni', 'manualDia', 'manualMes', 'manualAnio', 'autorizPin', 'autorizOtro'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('autorizMotivo').value = '';
+  document.getElementById('autorizOtro').style.display = 'none';
+  document.getElementById('manualDatosBox').style.display = '';
+  document.getElementById('autorizBox').style.display = 'none';
+  document.getElementById('manualStatus').textContent = '';
+  setScanStatus('');
+  const card = document.getElementById('manualCard');
+  card.style.display = 'block';
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setTimeout(() => document.getElementById('manualDni').focus(), 250);
+}
+function cerrarManual() {
+  manualInv = null;
+  document.getElementById('manualCard').style.display = 'none';
+}
+function manualError(msg) {
+  const st = document.getElementById('manualStatus');
+  st.textContent = msg; st.className = 'status-msg err';
+}
+// pasa solo al campo siguiente al completar día/mes
+[['manualDia', 'manualMes', 2], ['manualMes', 'manualAnio', 2]].forEach(([a, b, n]) => {
+  document.getElementById(a).addEventListener('input', e => {
+    e.target.value = e.target.value.replace(/\D/g, '');
+    if (e.target.value.length >= n) document.getElementById(b).focus();
   });
+});
+document.getElementById('manualAnio').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, ''); });
+document.getElementById('manualDni').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, ''); });
+
+document.getElementById('btnManualVerificar').addEventListener('click', () => {
+  if (!manualInv) return;
+  const dni = document.getElementById('manualDni').value.replace(/\D/g, '');
+  const dd = document.getElementById('manualDia').value.padStart(2, '0');
+  const mm = document.getElementById('manualMes').value.padStart(2, '0');
+  const yyyy = document.getElementById('manualAnio').value;
+  if (!esNumeroDni(dni)) { manualError('Revisá el número de DNI (7 u 8 números, sin puntos).'); return; }
+  const fecha = dd + '/' + mm + '/' + yyyy;
+  if (!fechaValida(fecha)) { manualError('Revisá la fecha de nacimiento (día, mes y año de 4 números).'); return; }
+  const inv = manualInv;
+  cerrarManual();
+  mostrarCandidato(inv, calcularEdad(fecha), { formato: 'manual', apellido: '', nombre: '', dni, fechaNacimiento: fecha }, 1, false, 'manual');
+});
+document.getElementById('btnMostrarAutoriz').addEventListener('click', () => {
+  document.getElementById('manualDatosBox').style.display = 'none';
+  document.getElementById('autorizBox').style.display = '';
+  document.getElementById('manualStatus').textContent = '';
+});
+document.getElementById('btnVolverDatos').addEventListener('click', () => {
+  document.getElementById('autorizBox').style.display = 'none';
+  document.getElementById('manualDatosBox').style.display = '';
+  document.getElementById('manualStatus').textContent = '';
+});
+document.getElementById('autorizMotivo').addEventListener('change', e => {
+  document.getElementById('autorizOtro').style.display = e.target.value === 'otro' ? '' : 'none';
+});
+document.getElementById('btnManualCancelar').addEventListener('click', () => {
+  if (manualInv) registrarIntento('cancelado', { invitado: manualInv, metodo: 'manual', detalle: 'Canceló la carga a mano' });
+  cerrarManual();
+});
+
+document.getElementById('btnAutorizar').addEventListener('click', () => {
+  const inv = manualInv;
+  if (!inv) return;
+  let motivo = document.getElementById('autorizMotivo').value;
+  if (motivo === 'otro') motivo = document.getElementById('autorizOtro').value.trim();
+  const pin = document.getElementById('autorizPin').value.trim();
+  if (!motivo) { manualError('Elegí el motivo.'); return; }
+  if (!/^\d{4}$/.test(pin)) { manualError('Falta el PIN del encargado (4 números).'); return; }
+  // el corte de las listas de RRPP vale también sin DNI (antes este camino lo salteaba)
+  if (inv.tipo === 'rrpp' && excedeHorario(evento.horaCorte)) {
+    manualError('Pasó el corte (' + (evento.horaCorte || '--:--') + '): las listas de RRPP ya no valen.');
+    registrarIntento('fuera_horario', { invitado: inv, metodo: 'sin_datos', detalle: 'Sin DNI, después del corte' });
+    return;
+  }
+  const btn = document.getElementById('btnAutorizar');
+  btn.disabled = true;
+  db.collection('usuarios').where('pin', '==', pin).where('activo', '==', true).limit(1).get()
+    .then(snap => {
+      btn.disabled = false;
+      const u = snap.empty ? null : snap.docs[0].data();
+      if (!u || !ROLES_AUTORIZAN.includes(u.rol)) { manualError('Ese PIN no puede autorizar. Tiene que ser de un encargado.'); return; }
+      cerrarManual();
+      confirmarIngreso(inv, { metodo: 'sin_datos', edad: null, dni: null, autorizadoPor: u.nombre, motivo });
+    })
+    .catch(e => { btn.disabled = false; manualError('No se pudo verificar el PIN: ' + e.message); });
+});
+
+/* ---------- Escaneo DNI: visor fino con marco, lee solo dentro del marco ---------- */
+// Lee el código de barras (PDF417, DNI tarjeta) y el QR (DNI electrónico nuevo). Usa el lector
+// nativo del navegador cuando existe (Android/Chrome, más rápido) y si no ZXing. En vez de
+// analizar la imagen entera de la cámara, recorta la franja que se ve en pantalla: lo que ve
+// el de la puerta es lo que se lee, y hay menos ruido que confunda al lector.
+let preseleccion = null; // invitado elegido a mano, pendiente de escaneo
+let currentStream = null;
+let escaneando = false;
+let scanLoopId = 0;
+let scanInicio = 0;
+let lecturasBasura = 0, crudoRaro = null;
+let detectorNativo = undefined; // undefined = sin probar, null = no hay
+// ZXing solo para el código de barras (PDF417); el QR lo lee jsQR, que es más confiable.
+const zxingHints = new Map([[ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.PDF_417]], [ZXing.DecodeHintType.TRY_HARDER, true]]);
+const zxingReader = new ZXing.MultiFormatReader();
+zxingReader.setHints(zxingHints);
+const scanCanvas = document.createElement('canvas');
+const scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
+
+async function prepararDetectorNativo() {
+  if (detectorNativo !== undefined) return detectorNativo;
+  detectorNativo = null;
+  try {
+    if ('BarcodeDetector' in window) {
+      const sop = await window.BarcodeDetector.getSupportedFormats();
+      if (sop.includes('pdf417')) detectorNativo = new window.BarcodeDetector({ formats: ['pdf417', 'qr_code'].filter(f => sop.includes(f)) });
+    }
+  } catch (e) { detectorNativo = null; }
+  return detectorNativo;
+}
+
+document.getElementById('btnEscanear').addEventListener('click', () => {
+  if (escaneando) { detenerEscaneo(true); setScanStatus(''); return; }
+  preseleccion = null;
+  iniciarEscaneo();
+});
+
+function botonEscanear(activo) {
+  const b = document.getElementById('btnEscanear');
+  b.className = activo ? 'btn-secondary' : 'btn-primary';
+  b.lastChild.textContent = activo ? 'Detener cámara' : 'Escanear DNI';
+}
+
+async function iniciarEscaneo() {
+  if (escaneando) return;
+  cerrarManual();
+  document.getElementById('candidatoCard').style.display = 'none';
+  const video = document.getElementById('video');
+  const visor = document.getElementById('visor');
+  visor.classList.remove('leido');
+  visor.style.display = 'block';
+  document.getElementById('visorHint').style.display = 'block';
+  document.getElementById('btnNoLee').style.display = 'none';
+  if (!preseleccion) setScanStatus('Pidiendo acceso a la cámara...');
+  escaneando = true;
+  botonEscanear(true);
+  lecturasBasura = 0; crudoRaro = null;
+  try {
+    currentStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
+    if (!escaneando) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; return; }
+    video.srcObject = currentStream;
+    await video.play().catch(() => {});
+    ajustarCamara();
+    activarLinterna();
+    if (!preseleccion) setScanStatus('');
+    await prepararDetectorNativo();
+    scanInicio = Date.now();
+    const miLoop = ++scanLoopId;
+    bucleEscaneo(miLoop);
+  } catch (e) {
+    detenerEscaneo();
+    setScanStatus('Error al acceder a la cámara: ' + e.message, 'err');
+  }
+}
+
+// Enfoque continuo y un poco de zoom donde el navegador lo permite (Android). El código del DNI
+// es muy fino: necesita detalle. En iPhone estas opciones no existen y se ignoran.
+function ajustarCamara() {
+  try {
+    const track = currentStream.getVideoTracks()[0];
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    const adv = {};
+    if (caps.focusMode && caps.focusMode.includes('continuous')) adv.focusMode = 'continuous';
+    if (caps.zoom && caps.zoom.max >= 1.4) adv.zoom = Math.max(caps.zoom.min || 1, 1.4);
+    if (Object.keys(adv).length) track.applyConstraints({ advanced: [adv] }).catch(() => {});
+  } catch (e) {}
+}
+
+// Rectángulo de la imagen de la cámara que se ve dentro del visor (object-fit: cover), con un
+// pequeño margen dentro del borde. Es lo que se manda al lector.
+function regionVisible(video) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const box = video.getBoundingClientRect();
+  if (!vw || !vh || !box.width || !box.height) return null;
+  const s = Math.max(box.width / vw, box.height / vh);
+  const visW = box.width / s, visH = box.height / s;
+  const x0 = (vw - visW) / 2, y0 = (vh - visH) / 2;
+  return { x: x0 + visW * 0.03, y: y0 + visH * 0.06, w: visW * 0.94, h: visH * 0.88 };
+}
+
+async function leerCuadro(video) {
+  const r = regionVisible(video);
+  if (!r) return null;
+  const escala = Math.min(1, 1400 / r.w);
+  scanCanvas.width = Math.round(r.w * escala);
+  scanCanvas.height = Math.round(r.h * escala);
+  scanCtx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, scanCanvas.width, scanCanvas.height);
+  if (detectorNativo) {
+    try {
+      const hits = await detectorNativo.detect(scanCanvas);
+      if (hits && hits.length) return hits[0].rawValue;
+    } catch (e) {}
+  } else {
+    try {
+      const fuente = new ZXing.HTMLCanvasElementLuminanceSource(scanCanvas);
+      const res = zxingReader.decodeWithState(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(fuente)));
+      if (res) return res.getText();
+    } catch (e) {}
+  }
+  if (window.jsQR) {
+    try {
+      const img = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
+      const qr = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+      if (qr && qr.data) return qr.data;
+    } catch (e) {}
+  }
+  return null;
+}
+
+async function bucleEscaneo(miLoop) {
+  const video = document.getElementById('video');
+  while (escaneando && miLoop === scanLoopId) {
+    const texto = await leerCuadro(video);
+    if (!escaneando || miLoop !== scanLoopId) return;
+    if (texto) {
+      const dni = parseDni(texto);
+      if (dni) { lecturaOk(dni); return; }
+      lecturasBasura++;
+      crudoRaro = texto;
+    }
+    // a los 6 segundos sin lectura válida se ofrece cargar a mano
+    if (Date.now() - scanInicio > 6000) document.getElementById('btnNoLee').style.display = 'flex';
+    await new Promise(r => setTimeout(r, 90));
+  }
+}
+
+function lecturaOk(dni) {
+  const visor = document.getElementById('visor');
+  visor.classList.add('leido');
+  try { if (navigator.vibrate) navigator.vibrate(80); } catch (e) {}
+  lecturasBasura = 0; crudoRaro = null;
+  setTimeout(() => { detenerEscaneo(); onDniEscaneado(dni); }, 220);
 }
 
 function activarLinterna() {
+  const btnTorch = document.getElementById('btnTorch');
   if (!currentStream) return;
   const track = currentStream.getVideoTracks()[0];
   const caps = track.getCapabilities ? track.getCapabilities() : {};
-  const btnTorch = document.getElementById('btnTorch');
   if (caps.torch) {
     btnTorch.style.display = 'flex';
     let on = false;
+    document.getElementById('btnTorchLabel').textContent = 'Linterna';
     btnTorch.onclick = () => {
       on = !on;
       track.applyConstraints({ advanced: [{ torch: on }] }).catch(() => {});
@@ -1645,26 +2122,37 @@ function activarLinterna() {
   }
 }
 
-function detenerEscaneo() {
-  try { reader.reset(); } catch (e) {}
-  document.getElementById('video').style.display = 'none';
+// registrarFalla: si el de la puerta corta la cámara después de lecturas ilegibles, queda
+// registrado (con el texto crudo, para poder corregir el lector con un caso real).
+function detenerEscaneo(registrarFalla) {
+  const habia = escaneando;
+  escaneando = false;
+  scanLoopId++;
+  if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
+  const video = document.getElementById('video');
+  if (video) video.srcObject = null;
+  document.getElementById('visor').style.display = 'none';
+  document.getElementById('visorHint').style.display = 'none';
   document.getElementById('btnTorch').style.display = 'none';
+  document.getElementById('btnNoLee').style.display = 'none';
+  botonEscanear(false);
+  if (habia && registrarFalla && lecturasBasura > 0) {
+    registrarIntento('lectura_fallida', { invitado: preseleccion, metodo: 'escaneo', crudo: crudoRaro, detalle: lecturasBasura + ' lecturas ilegibles' });
+  }
+  lecturasBasura = 0; crudoRaro = null;
 }
 
 function onDniEscaneado(dni) {
-  detenerEscaneo();
   const edad = calcularEdad(dni.fechaNacimiento);
-  const statusEl = document.getElementById('scanStatus');
-
   if (preseleccion) {
-    // ya eligieron manualmente a quién es, solo falta la edad/identidad del DNI
-    mostrarCandidato(preseleccion, edad, dni, 1);
-    statusEl.textContent = '';
+    // ya eligieron a mano a quién es; el escaneo aporta edad e identidad
+    const inv = preseleccion;
+    preseleccion = null;
+    setScanStatus('');
+    mostrarCandidato(inv, edad, dni, 1, false, 'escaneo');
     return;
   }
-
-  // matching automático contra pendientes: el apellido tiene que coincidir sí o sí,
-  // el nombre tolera apodos/versiones cortas (nadie anota su nombre legal completo en una lista)
+  // matching automático contra pendientes: el apellido pesa más, el nombre tolera apodos
   const apellidoTokens = tokens(dni.apellido);
   const nombreTokens = tokens(dni.nombre);
   const pendientes = invitados.filter(i => i.estado === 'pendiente');
@@ -1677,26 +2165,34 @@ function onDniEscaneado(dni) {
     .sort((a, b) => b.score - a.score);
 
   if (!candidatos.length) {
-    statusEl.innerHTML = '❌ No aparece en ninguna lista (' + escapeHtml(dni.apellido + ' ' + dni.nombre) + ', ' + (edad !== null ? edad + ' años' : 'edad no calculada') + '). Probá "Buscar por nombre".';
+    const ya = invitados.find(i => i.estado === 'ingresado' && i.dni && i.dni.dni && i.dni.dni === dni.dni);
+    const statusEl = document.getElementById('scanStatus');
+    statusEl.innerHTML = ya
+      ? '⚠️ ' + escapeHtml(dni.apellido + ' ' + dni.nombre) + ' ya entró a las ' + horaCorta(ya.horaIngreso) + ' (lista de ' + escapeHtml(ya.responsable) + ').'
+      : '❌ No aparece en ninguna lista (' + escapeHtml(dni.apellido + ' ' + dni.nombre) + ', ' + (edad !== null ? edad + ' años' : 'edad no calculada') + '). Probá "Buscar por nombre o RRPP". Quedó registrado para revisar.';
     statusEl.className = 'status-msg err';
+    if (!ya) registrarIntento('no_aparece', { dni, edad, metodo: 'escaneo' });
     return;
   }
 
   // si hay más de una persona posible y no está claro cuál es (puntajes parecidos),
-  // dejamos que el fiscalizador elija a mano en vez de adivinar
+  // el de la puerta elige a mano en vez de adivinar
   const top = candidatos[0];
   const segundo = candidatos[1];
   const ambiguo = !!segundo && (top.score - segundo.score) < 0.2;
+  if (!ambiguo) mostrarCandidato(top.p, edad, dni, top.score, top.soloNombre, 'escaneo');
+  else mostrarMultiplesCandidatos(candidatos, edad, dni);
+}
 
-  if (!ambiguo) {
-    mostrarCandidato(top.p, edad, dni, top.score, false, top.soloNombre);
-  } else {
-    mostrarMultiplesCandidatos(candidatos, edad, dni);
-  }
+function horaCorta(ms) {
+  if (!ms) return '--:--';
+  const d = new Date(ms);
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
 
 function mostrarMultiplesCandidatos(candidatos, edad, dni) {
-  document.getElementById('scanStatus').textContent = '';
+  candidato = { invitado: null, edad, dni, metodo: 'escaneo', multiples: true, registrado: false };
+  setScanStatus('');
   document.getElementById('candidatoTitle').textContent = 'Hay más de una coincidencia';
   document.getElementById('candidatoCard').style.display = 'block';
   document.getElementById('candidatoInfo').innerHTML =
@@ -1709,69 +2205,57 @@ function mostrarMultiplesCandidatos(candidatos, edad, dni) {
   checklistEl.querySelectorAll('.search-result').forEach(el => {
     el.addEventListener('click', () => {
       const c = candidatos[Number(el.dataset.idx)];
-      mostrarCandidato(c.p, edad, dni, c.score, false, c.soloNombre);
+      mostrarCandidato(c.p, edad, dni, c.score, c.soloNombre, 'escaneo');
     });
   });
 }
 
-function mostrarCandidato(inv, edad, dni, score, sinDni, soloNombre) {
-  candidato = { invitado: inv, edad, dni, score, sinDni: !!sinDni, soloNombre: !!soloNombre };
-  document.getElementById('candidatoTitle').textContent = sinDni ? 'Ingreso sin DNI' : 'Datos encontrados';
+function mostrarCandidato(inv, edad, dni, score, soloNombre, metodo) {
+  candidato = { invitado: inv, edad, dni, score, soloNombre: !!soloNombre, metodo: metodo || 'escaneo', registrado: false };
+  const esManual = candidato.metodo === 'manual';
+  document.getElementById('candidatoTitle').textContent = esManual ? 'Datos cargados a mano' : 'Datos encontrados';
   document.getElementById('candidatoCard').style.display = 'block';
   document.getElementById('btnConfirmarIngreso').style.display = 'flex';
   const tipo = inv.tipo;
   const infoEl = document.getElementById('candidatoInfo');
-
-  if (sinDni) {
-    // Ingreso sin verificar DNI: no hay edad ni identidad confirmadas, se salta
-    // por completo el checklist automático — queda a criterio del fiscalizador
-    // y registrado en la auditoría al confirmar.
-    infoEl.innerHTML = `
-      <div class="list-item"><span>Nombre en lista</span><strong>${escapeHtml(inv.nombreCompleto)}</strong></div>
-      <div class="list-item"><span>Responsable</span><strong>${escapeHtml(inv.responsable)} <span class="tag ${tagClase(tipo)}">${tagTexto(tipo)}</span></strong></div>
-    `;
-    document.getElementById('candidatoChecklist').innerHTML =
-      '<div class="status-msg err" style="text-align:left;">⚠️ No se escaneó el DNI: no hay edad ni identidad verificadas. Confirmá solo si estás seguro/a — queda registrado con tu nombre.</div>';
-    document.getElementById('btnConfirmarIngreso').disabled = false;
-    return;
-  }
 
   infoEl.innerHTML = `
     ${soloNombre ? '<div class="status-msg err" style="text-align:left;">⚠️ Coincidencia solo por nombre (el apellido escaneado no coincidió con la lista) — confirmá bien que es la persona correcta.</div>' : ''}
     <div class="list-item"><span>Nombre en lista</span><strong>${escapeHtml(inv.nombreCompleto)}</strong></div>
     <div class="list-item"><span>Responsable</span><strong>${escapeHtml(inv.responsable)} <span class="tag ${tagClase(tipo)}">${tagTexto(tipo)}</span></strong></div>
     ${dni && dni.apellido ? `<div class="list-item"><span>DNI escaneado</span><strong>${escapeHtml(dni.apellido + ' ' + dni.nombre)}</strong></div>` : ''}
+    ${esManual ? `<div class="list-item"><span>DNI (a mano)</span><strong>${escapeHtml(dni.dni)}</strong></div>` : ''}
     <div class="list-item"><span>Edad</span><strong>${edad !== null ? edad + ' años' : 'no se pudo leer'}</strong></div>
   `;
 
   const checklistEl = document.getElementById('candidatoChecklist');
-  let bloqueaIngreso = false;
+  let bloqueaIngreso = false, motivoBloqueo = null;
   let html = '';
 
   if (tipo === 'rrpp') {
     const edadMinima = evento.edadMinima || EDAD_MINIMA_DEFECTO;
-    const edadDesconocida = edad === null;
-    if (edadDesconocida) {
-      // calcularEdad() devolvió null por ruido en el escaneo — antes esto se trataba
-      // como "NO CUMPLE +20" (falso rechazo, bug reportado por Manu el 7/9/2026).
-      // Ahora se pide confirmación manual en vez de bloquear automáticamente.
+    if (edad === null) {
       html += `<div class="list-item"><span>Requisito +${edadMinima} años</span><span class="badge badge-warn">NO SE PUDO LEER</span></div>`;
-      html += `<div class="checkline"><input type="checkbox" id="chkEdadManual"><label for="chkEdadManual" style="margin:0;">Confirmo a ojo que es mayor de ${edadMinima} años (no se pudo calcular la edad del escaneo)</label></div>`;
+      html += `<div class="checkline"><input type="checkbox" id="chkEdadManual"><label for="chkEdadManual" style="margin:0;">Confirmo a ojo que es mayor de ${edadMinima} años</label></div>`;
     } else {
       const edadOk = edad >= edadMinima;
       html += `<div class="list-item"><span>Requisito +${edadMinima} años</span><span class="badge ${edadOk ? 'badge-ok' : 'badge-no'}">${edadOk ? 'OK' : 'NO CUMPLE'}</span></div>`;
-      if (!edadOk) bloqueaIngreso = true;
+      if (!edadOk) { bloqueaIngreso = true; motivoBloqueo = 'no_cumple_edad'; }
     }
-
     const excedido = excedeHorario(evento.horaCorte);
     html += `<div class="list-item"><span>Horario (corte ${escapeHtml(evento.horaCorte || '--:--')})</span><span class="badge ${!excedido ? 'badge-ok' : 'badge-no'}">${!excedido ? 'OK' : 'FUERA DE HORARIO'}</span></div>`;
-    if (excedido) bloqueaIngreso = true;
-
+    if (excedido) { bloqueaIngreso = true; motivoBloqueo = motivoBloqueo || 'fuera_horario'; }
     html += `<div class="checkline"><input type="checkbox" id="chkVcp"><label for="chkVcp" style="margin:0;">Confirmo verbalmente que es de Carlos Paz o alrededores</label></div>`;
   } else {
     html += `<div class="muted">Lista de ${tagTexto(tipo).toLowerCase()} — sin restricciones de edad ni horario.</div>`;
   }
   checklistEl.innerHTML = html;
+
+  // un rechazo por edad u horario queda registrado al mostrarse
+  if (bloqueaIngreso) {
+    candidato.registrado = true;
+    registrarIntento(motivoBloqueo, { invitado: inv, dni, edad, metodo: candidato.metodo });
+  }
 
   const btnConfirmar = document.getElementById('btnConfirmarIngreso');
   function actualizarBoton() {
@@ -1790,9 +2274,14 @@ function mostrarCandidato(inv, edad, dni, score, sinDni, soloNombre) {
     const chkEdadManual = document.getElementById('chkEdadManual');
     if (chkEdadManual) chkEdadManual.addEventListener('change', actualizarBoton);
   }
+  document.getElementById('candidatoCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 document.getElementById('btnCancelarCandidato').addEventListener('click', () => {
+  // cancelar sin confirmar también queda registrado (salvo que ya se registró el rechazo)
+  if (candidato && !candidato.registrado) {
+    registrarIntento('cancelado', { invitado: candidato.invitado, dni: candidato.dni, edad: candidato.edad, metodo: candidato.metodo });
+  }
   candidato = null;
   preseleccion = null;
   document.getElementById('candidatoCard').style.display = 'none';
@@ -1800,30 +2289,193 @@ document.getElementById('btnCancelarCandidato').addEventListener('click', () => 
 });
 
 document.getElementById('btnConfirmarIngreso').addEventListener('click', () => {
-  if (!candidato) return;
-  const { invitado, edad, dni, sinDni } = candidato;
-  if (sinDni) {
-    const ok = confirm('¿Confirmás el ingreso de ' + invitado.nombreCompleto + ' SIN haber escaneado su DNI? Esto queda registrado con tu nombre.');
-    if (!ok) return;
+  if (!candidato || !candidato.invitado) return;
+  const { invitado, edad, dni, metodo } = candidato;
+  candidato = null;
+  confirmarIngreso(invitado, { metodo, edad, dni });
+});
+
+// Guarda el ingreso. Se cierra la tarjeta enseguida (con poca señal Firestore lo deja en cola y
+// lo sube solo); si el guardado falla, aparece un aviso que no se va solo y queda en Revisar.
+function confirmarIngreso(invitado, x) {
+  const actual = invitados.find(i => i.id === invitado.id);
+  if (actual && actual.estado === 'ingresado') {
+    setScanStatus('⚠️ ' + invitado.nombreCompleto + ' ya entró a las ' + horaCorta(actual.horaIngreso) + (actual.ingresadoPor ? ' (lo confirmó ' + actual.ingresadoPor + ')' : '') + '.', 'err');
+    document.getElementById('candidatoCard').style.display = 'none';
+    return;
   }
-  db.collection('invitados').doc(invitado.id).update({
+  const sinDatos = x.metodo === 'sin_datos';
+  const datos = {
     estado: 'ingresado',
     horaIngreso: Date.now(),
-    edadCalculada: sinDni ? null : edad,
-    dni: (!sinDni && dni) ? { apellido: dni.apellido, nombre: dni.nombre, dni: dni.dni } : null,
+    edadCalculada: (x.edad === 0 || x.edad) ? x.edad : null,
+    dni: (x.dni && x.dni.dni) ? { apellido: x.dni.apellido || '', nombre: x.dni.nombre || '', dni: x.dni.dni } : null,
     ingresadoPor: sesion ? sesion.nombre : null,
-    sinDni: !!sinDni
-  }).then(() => {
-    showToast(sinDni ? '⚠️ Ingreso sin DNI confirmado: ' + invitado.nombreCompleto : '✅ Ingreso confirmado: ' + invitado.nombreCompleto);
-    registrarAuditoria(sinDni ? 'ingreso_sin_dni' : 'confirmar_ingreso', (sinDni ? 'Confirmó ingreso SIN DNI de ' : 'Confirmó el ingreso de ') + invitado.nombreCompleto);
-    candidato = null;
-    preseleccion = null;
-    document.getElementById('candidatoCard').style.display = 'none';
-    document.getElementById('scanStatus').textContent = '';
+    sinDni: sinDatos,
+    metodo: x.metodo || 'escaneo'
+  };
+  if (sinDatos) { datos.autorizadoPor = x.autorizadoPor; datos.motivoSinDni = x.motivo; }
+  preseleccion = null;
+  document.getElementById('candidatoCard').style.display = 'none';
+  setScanStatus('');
+  db.collection('invitados').doc(invitado.id).update(datos).then(() => {
+    const det = sinDatos
+      ? 'Confirmó ingreso SIN DNI de ' + invitado.nombreCompleto + ' (autorizó ' + x.autorizadoPor + ': ' + x.motivo + ')'
+      : 'Confirmó el ingreso de ' + invitado.nombreCompleto + (x.metodo === 'manual' ? ' (DNI a mano)' : '');
+    registrarAuditoria(sinDatos ? 'ingreso_sin_dni' : 'confirmar_ingreso', det);
   }).catch(e => {
-    showToast('Error: ' + e.message);
+    setScanStatus('❌ NO se guardó el ingreso de ' + invitado.nombreCompleto + ' (' + e.message + '). Quedó en Revisar para acreditarlo.', 'err');
+    registrarIntento('error_guardado', { invitado, dni: x.dni, edad: x.edad, metodo: x.metodo, detalle: e.message });
   });
-});
+  showToast(sinDatos ? '⚠️ Ingreso sin DNI autorizado: ' + invitado.nombreCompleto : '✅ Ingreso confirmado: ' + invitado.nombreCompleto);
+}
+
+/* ---------- Revisar: rechazos y errores para acreditar después ---------- */
+let revisarNocheId = null, revisarFiltro = 'pendiente', unsubIntentos = null;
+let intentosNoche = [], invitadosRevisar = [], revisarBuscando = null;
+
+function abrirRevisar() {
+  const sel = document.getElementById('revisarNoche');
+  db.collection('eventos').orderBy('creadoEn', 'desc').limit(8).get().then(snap => {
+    const noches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!revisarNocheId || !noches.some(n => n.id === revisarNocheId)) revisarNocheId = eventoId || (noches[0] && noches[0].id) || null;
+    sel.innerHTML = noches.map(n => `<option value="${escapeAttr(n.id)}">${escapeHtml((n.nombreEvento || 'Sin nombre') + ' · ' + fechaCorta(n.fecha))}${n.id === eventoId ? ' (activa)' : ''}</option>`).join('');
+    if (revisarNocheId) sel.value = revisarNocheId;
+    suscribirRevisar();
+  }).catch(() => { document.getElementById('listaIntentos').innerHTML = '<div class="muted">No se pudieron cargar las noches.</div>'; });
+}
+document.getElementById('revisarNoche').addEventListener('change', e => { revisarNocheId = e.target.value; suscribirRevisar(); });
+document.querySelectorAll('#revisarFiltros button').forEach(b => b.addEventListener('click', () => {
+  revisarFiltro = b.dataset.f;
+  document.querySelectorAll('#revisarFiltros button').forEach(x => x.classList.toggle('on', x === b));
+  renderIntentos();
+}));
+
+function suscribirRevisar() {
+  if (unsubIntentos) { unsubIntentos(); unsubIntentos = null; }
+  intentosNoche = []; invitadosRevisar = []; revisarBuscando = null;
+  const id = revisarNocheId;
+  if (!id) { document.getElementById('listaIntentos').innerHTML = '<div class="muted">Todavía no hay noches.</div>'; return; }
+  document.getElementById('listaIntentos').innerHTML = '<div class="muted">Cargando...</div>';
+  unsubIntentos = db.collection('intentos').where('eventoId', '==', id).onSnapshot(snap => {
+    if (revisarNocheId !== id) return;
+    intentosNoche = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderIntentos();
+  }, () => { document.getElementById('listaIntentos').innerHTML = '<div class="muted">No se pudo cargar.</div>'; });
+  if (id !== eventoId) {
+    db.collection('invitados').where('eventoId', '==', id).get().then(sn => {
+      if (revisarNocheId !== id) return;
+      invitadosRevisar = sn.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderIntentos();
+    }).catch(() => {});
+  }
+}
+function listaRevisar() { return revisarNocheId === eventoId ? invitados : invitadosRevisar; }
+
+function renderIntentos() {
+  const cont = document.getElementById('listaIntentos');
+  let lista = intentosNoche.slice().sort((a, b) => (b.hora || 0) - (a.hora || 0));
+  const pendientes = lista.filter(i => i.estado === 'pendiente').length;
+  if (revisarFiltro === 'pendiente') lista = lista.filter(i => i.estado === 'pendiente');
+  if (!lista.length) {
+    cont.innerHTML = '<div class="muted">' + (revisarFiltro === 'pendiente' ? 'No hay nada pendiente de revisar.' : 'Sin rechazos ni errores en esta noche.') + '</div>';
+    return;
+  }
+  const invs = listaRevisar();
+  cont.innerHTML = `<div class="muted" style="text-align:left;margin-bottom:4px;">${pendientes} pendiente${pendientes === 1 ? '' : 's'}</div>` + lista.map(it => {
+    const quien = it.candidatoNombre || [it.dniApellido, it.dniNombre].filter(Boolean).join(' ') || 'Sin datos del DNI';
+    const partes = [TIPOS_INTENTO[it.tipo] || it.tipo];
+    if (it.responsable) partes.push('lista de ' + it.responsable);
+    if (it.candidatoNombre && it.dniApellido) partes.push('DNI: ' + it.dniApellido + ' ' + (it.dniNombre || ''));
+    if (it.edad === 0 || it.edad) partes.push(it.edad + ' años');
+    if (it.detalle) partes.push(it.detalle);
+    if (it.puerta) partes.push('puerta: ' + it.puerta);
+    let acc = '';
+    if (it.estado === 'pendiente') {
+      const cand = it.candidatoId ? invs.find(i => i.id === it.candidatoId) : null;
+      const puedeDirecto = cand && cand.estado === 'pendiente';
+      acc = `<div class="intento-acc">
+        ${puedeDirecto ? `<button class="btn-sm btn-secondary acc-main" style="min-height:44px;" data-acc="acreditar" data-id="${it.id}">Acreditar a ${escapeHtml(cand.responsable)}</button>` : ''}
+        <button class="btn-sm btn-secondary" style="min-height:42px;" data-acc="buscar" data-id="${it.id}">${puedeDirecto ? 'Otra lista' : 'Buscar en listas'}</button>
+        <button class="btn-sm btn-secondary" style="min-height:42px;" data-acc="descartar" data-id="${it.id}">Descartar</button>
+      </div>`;
+      if (revisarBuscando === it.id) {
+        acc += `<input type="text" class="revisar-buscar" data-id="${it.id}" placeholder="Nombre o RRPP..." style="margin-top:10px;" autocomplete="off"><div class="revisar-res" data-id="${it.id}"></div>`;
+      }
+    } else {
+      acc = `<div class="intento-det">${it.estado === 'acreditado' ? '✅ Acreditado a ' + escapeHtml(it.acreditadoResponsable || '') : 'Descartado'}${it.resueltoPor ? ' por ' + escapeHtml(it.resueltoPor) : ''}</div>`;
+    }
+    return `<div class="intento${it.estado !== 'pendiente' ? ' resuelto' : ''}">
+      <div class="intento-top"><span class="intento-nom">${escapeHtml(quien)}</span><span class="intento-hora">${horaCorta(it.hora)}</span></div>
+      <div class="intento-det">${escapeHtml(partes.join(' · '))}</div>${acc}</div>`;
+  }).join('');
+
+  cont.querySelectorAll('button[data-acc]').forEach(b => b.addEventListener('click', () => {
+    const it = intentosNoche.find(x => x.id === b.dataset.id);
+    if (!it) return;
+    if (b.dataset.acc === 'descartar') resolverIntento(it, { estado: 'descartado' });
+    else if (b.dataset.acc === 'buscar') { revisarBuscando = revisarBuscando === it.id ? null : it.id; renderIntentos(); const inp = cont.querySelector('.revisar-buscar'); if (inp) inp.focus(); }
+    else if (b.dataset.acc === 'acreditar') {
+      const cand = listaRevisar().find(i => i.id === it.candidatoId);
+      if (cand) acreditar(it, cand);
+    }
+  }));
+  const inp = cont.querySelector('.revisar-buscar');
+  if (inp) inp.addEventListener('input', () => {
+    const q = normalizar(inp.value);
+    const resEl = cont.querySelector('.revisar-res');
+    if (!q) { resEl.innerHTML = ''; return; }
+    const res = buscarPendientes(listaRevisar(), q);
+    resEl.innerHTML = (res.porNombre.length || res.porResp.length) ? htmlResultados(res) : '<div class="muted" style="margin-top:6px;">Sin coincidencias.</div>';
+    resEl.querySelectorAll('.search-result').forEach(el => el.addEventListener('click', () => {
+      const it = intentosNoche.find(x => x.id === inp.dataset.id);
+      const inv = listaRevisar().find(i => i.id === el.dataset.id);
+      if (it && inv) acreditar(it, inv);
+    }));
+  });
+}
+
+function resolverIntento(it, campos) {
+  return db.collection('intentos').doc(it.id).update({
+    ...campos,
+    crudo: null, // el texto crudo del DNI no se guarda más allá de la revisión
+    resueltoPor: sesion ? sesion.nombre : null,
+    resueltoEn: Date.now()
+  }).catch(e => showToast('Error: ' + e.message));
+}
+
+// Suma el ingreso a la lista elegida con la hora del intento. Si la noche ya tenía el cierre
+// guardado, se recalcula el resumen para que el historial y la carga al Excel lo incluyan.
+function acreditar(it, inv) {
+  const nocheId = revisarNocheId;
+  db.collection('invitados').doc(inv.id).update({
+    estado: 'ingresado',
+    horaIngreso: it.hora || Date.now(),
+    edadCalculada: (it.edad === 0 || it.edad) ? it.edad : null,
+    dni: it.dni ? { apellido: it.dniApellido || '', nombre: it.dniNombre || '', dni: it.dni } : null,
+    ingresadoPor: it.puerta || null,
+    sinDni: false,
+    metodo: 'acreditado',
+    acreditadoPor: sesion ? sesion.nombre : null,
+    acreditadoEn: Date.now(),
+    intentoId: it.id
+  }).then(() => {
+    resolverIntento(it, { estado: 'acreditado', acreditadoA: inv.id, acreditadoResponsable: inv.responsable });
+    registrarAuditoria('acreditar', 'Acreditó a ' + inv.nombreCompleto + ' en la lista de ' + inv.responsable + ' (' + (TIPOS_INTENTO[it.tipo] || it.tipo) + ')');
+    showToast('✅ Acreditado a ' + inv.responsable + ': ' + inv.nombreCompleto);
+    revisarBuscando = null;
+    if (nocheId !== eventoId) {
+      const local = invitadosRevisar.find(i => i.id === inv.id);
+      if (local) { local.estado = 'ingresado'; local.metodo = 'acreditado'; }
+      db.collection('eventos').doc(nocheId).get().then(ev => {
+        if (ev.exists && ev.data().resumen) {
+          db.collection('eventos').doc(nocheId).set({ resumen: armarResumen(invitadosRevisar) }, { merge: true }).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+    renderIntentos();
+  }).catch(e => showToast('Error al acreditar: ' + e.message));
+}
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

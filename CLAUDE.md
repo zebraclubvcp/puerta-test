@@ -90,6 +90,19 @@ const firebaseConfig = {
 - `usuarios`: `{ nombre, pin, rol: "carga"|"puerta"|"admin", activo, creadoEn }`
 - `auditoria`: `{ accion, detalle, usuario, rol, creadoEn }`
 
+## Cambios 12/10/2026 (después del análisis de la noche 10/10)
+
+Diagnóstico con datos reales: 95 de 347 ingresos fueron "sin DNI" (salteaba edad/horario/VCP), ~11% de los escaneos leían datos corridos o basura, los rechazos no quedaban registrados y el DNI electrónico nuevo (QR) no se podía leer.
+
+- **Lector de DNI (`parseDni`)**: reconoce 3 formatos por la forma de los campos — PDF417 2012+, PDF417 2009-12 (14+ campos, empieza con @) y QR del DNI electrónico (`tramite@APELLIDO@NOMBRES@DNI@EJEMPLAR@DD/MM/AA@DD/MM/AA@<JWT>`, sin sexo, año de 2 dígitos). Rescate de campos corridos. Si la lectura trae basura devuelve null y el visor sigue leyendo.
+- **Visor**: franja fina con marco; se decodifica solo la parte visible (recorte del video). Lector nativo `BarcodeDetector` si existe; si no ZXing (solo PDF417) + **jsQR** para QR (ZXing falla con algunos QR grandes, probado). 1920x1080, enfoque continuo, zoom 1.4 si se puede, verde + vibración al leer, botón "¿No lee?" a los 6 s.
+- **DNI a mano** reemplaza "Ingresar sin DNI": número + fecha de nacimiento, mismos controles. Sin DNI encima → motivo + PIN de un usuario con rol en `ROLES_AUTORIZAN` (admin, carga). El corte de horario de RRPP aplica igual.
+- **Colección `intentos`** (nueva): `{ eventoId, tipo: no_aparece|no_cumple_edad|fuera_horario|cancelado|error_guardado|lectura_fallida, hora, puerta, dniApellido, dniNombre, dni, edad, metodo, candidatoId, candidatoNombre, responsable, tipoLista, detalle, crudo, estado: pendiente|acreditado|descartado, resueltoPor, resueltoEn, acreditadoA, acreditadoResponsable }`. `crudo` (texto del código ilegible) se borra al resolver.
+- **Pestaña Revisar** (admin y carga): rechazos por noche; "Acreditar" suma el ingreso a la lista con la hora del intento (`metodo: 'acreditado'`, `acreditadoPor`) y recalcula el resumen guardado si la noche ya estaba cerrada.
+- **Invitados**: nuevo campo `metodo` (escaneo|manual|sin_datos|acreditado); `sinDni` se mantiene (= sin_datos) para compatibilidad; `autorizadoPor`, `motivoSinDni`. Los ingresos viejos sin `metodo` se leen con `metodoDe()`.
+- **Buscador**: por nombre del invitado o por RRPP ("davi" muestra la lista de Julieta Davi).
+- Pruebas: parser con DNI inventados de los 3 formatos + punta a punta con Firestore falso en memoria y cámara simulada (PDF417 y QR generados). No se probaron contra la base real.
+
 ## Arquitectura actual vs. objetivo
 
 **Hoy**: un solo `index.html` con las 4 vistas, el login, el matching, el escaneo, Firestore y el service worker todos mezclados. Ese formato es la causa raíz de bugs como el de la "edad aleatoria": un cambio en una parte puede romper otra sin que se note hasta usarlo en vivo.
