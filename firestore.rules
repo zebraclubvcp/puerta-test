@@ -1,0 +1,19 @@
+rules_version = '2';
+
+// Zebra Club · base "zebra-puerta" (App Puerta + App Calle)
+// Solo entra la cuenta del equipo (equipo@zebraclub.app), con la que se vincula cada celular.
+// Todo lo demás (alguien que solo tiene el link o la configuración pública) queda afuera.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function esEquipo() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'password'
+        && request.auth.token.email == 'equipo@zebraclub.app';
+    }
+
+    match /{document=**} {
+      allow read, write: if esEquipo();
+    }
+  }
+}

@@ -248,6 +248,7 @@
   .login-box { width: 100%; max-width: 340px; background: var(--surf); border-radius: 20px; padding: 28px 20px 22px; }
   .login-box h1 { font-size: 20px; margin: 0 0 4px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
   .login-sub { font-size: 14px; color: var(--ink2); margin-bottom: 20px; }
+  .vinc-aviso { display: block; width: 100%; margin-top: 8px; min-height: 36px; border: 1px solid var(--warn); background: var(--warnbg); color: var(--warn); border-radius: 10px; font: inherit; font-size: 13px; cursor: pointer; }
   .login-pin-input {
     width: 100%; text-align: center; font-size: 30px; letter-spacing: 14px; font-weight: 700; font-family: inherit;
     padding: 14px 10px 14px 24px; border-radius: 14px;
@@ -273,6 +274,18 @@
 </head>
 <body>
 
+<div id="vincOverlay" class="login-overlay" style="display:none;z-index:1100;">
+  <div class="login-box">
+    <h1>Vincular celular</h1>
+    <div class="login-sub" id="vincSub">Este celular todavía no está vinculado al equipo de Zebra. Se hace una sola vez: poné la contraseña del equipo.</div>
+    <label for="vincPass" style="text-align:left;">Contraseña del equipo</label>
+    <input type="password" id="vincPass" autocomplete="current-password" placeholder="Contraseña">
+    <button class="btn-primary" id="btnVincular">Vincular este celular</button>
+    <div class="status-msg" id="vincStatus"></div>
+    <button type="button" class="btn-link" id="btnVincAhoraNo" style="margin-top:6px;">Ahora no</button>
+  </div>
+</div>
+
 <div id="loginOverlay" class="login-overlay">
   <div class="login-box">
     <h1>Zebra Club</h1>
@@ -280,6 +293,7 @@
     <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" id="loginPin" class="login-pin-input" placeholder="----" autocomplete="off">
     <button class="btn-primary" id="btnLogin">Entrar</button>
     <div class="status-msg" id="loginStatus"></div>
+    <button type="button" class="btn-link vinc-link" id="btnLoginVincular" style="display:none;margin-top:6px;">Vincular este celular</button>
   </div>
 </div>
 
@@ -290,6 +304,7 @@
     <button class="logout-btn" id="btnLogout" style="display:none;" title="Cerrar sesión" aria-label="Cerrar sesión"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
   </div>
   <div class="evento-info" id="eventoInfo">Cargando evento...</div>
+  <button type="button" class="vinc-aviso" id="vincAviso" style="display:none;">Celular sin vincular · tocá para vincularlo</button>
   <div class="user-info" id="userInfo" style="display:none;"></div>
 </header>
 
@@ -476,6 +491,7 @@ María López
         <option value="carga">Carga (horario + listas)</option>
         <option value="puerta">Puerta + Resumen</option>
         <option value="admin">Admin (todo + Usuarios)</option>
+        <option value="calle">Solo App Calle</option>
       </select>
       <button class="btn-primary" id="btnCrearUsuario">Generar PIN</button>
       <div class="status-msg" id="usuarioStatus"></div>
@@ -519,6 +535,7 @@ María López
 <!-- Firebase (compat SDK, sin build tools) -->
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <!-- ZXing para escaneo de DNI (PDF417) -->
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
 <!-- jsQR para el QR del DNI electrónico nuevo (ZXing falla con algunos QR grandes, probado 12/10/2026) -->
@@ -549,6 +566,51 @@ const db = firebase.firestore();
 db.enablePersistence({ synchronizeTabs: true }).catch(err => {
   console.warn('No se pudo activar la persistencia offline de Firestore:', err.code);
 });
+/* ---------- Vinculación del celular (Firebase Auth) ---------- */
+// La base solo deja entrar a la cuenta del equipo. Cada celular se vincula una vez con la
+// contraseña del equipo (queda guardado); después se entra con el PIN de siempre.
+// Mientras las reglas de la base sigan abiertas, un celular sin vincular funciona igual
+// pero muestra el aviso; cuando la base rechaza ("permission-denied") se pide vincular sí o sí.
+const EMAIL_EQUIPO = 'equipo@zebraclub.app';
+const auth = firebase.auth();
+const authListo = new Promise(res => { const un = auth.onAuthStateChanged(u => { un(); res(u); }); });
+function esRechazoBase(e) { return !!e && (e.code === 'permission-denied' || /permission/i.test(e.message || '')); }
+function mostrarVinculacion(obligatoria) {
+  document.getElementById('vincOverlay').style.display = 'flex';
+  document.getElementById('btnVincAhoraNo').style.display = obligatoria ? 'none' : '';
+  document.getElementById('vincSub').textContent = obligatoria
+    ? 'La base no deja entrar a este celular. Vinculalo con la contraseña del equipo (se hace una sola vez).'
+    : 'Este celular todavía no está vinculado al equipo de Zebra. Se hace una sola vez: poné la contraseña del equipo.';
+  document.getElementById('vincStatus').textContent = '';
+  setTimeout(() => document.getElementById('vincPass').focus(), 100);
+}
+function actualizarAvisoVinculo() {
+  const sin = !auth.currentUser;
+  document.getElementById('vincAviso').style.display = sin ? '' : 'none';
+  document.getElementById('btnLoginVincular').style.display = sin ? '' : 'none';
+}
+auth.onAuthStateChanged(actualizarAvisoVinculo);
+document.getElementById('vincAviso').addEventListener('click', () => mostrarVinculacion(false));
+document.getElementById('btnLoginVincular').addEventListener('click', () => mostrarVinculacion(false));
+document.getElementById('btnVincAhoraNo').addEventListener('click', () => { document.getElementById('vincOverlay').style.display = 'none'; });
+function vincular() {
+  const pass = document.getElementById('vincPass').value;
+  const st = document.getElementById('vincStatus');
+  if (!pass) return;
+  st.textContent = 'Vinculando...'; st.className = 'status-msg';
+  auth.signInWithEmailAndPassword(EMAIL_EQUIPO, pass).then(() => {
+    st.textContent = 'Listo, celular vinculado.'; st.className = 'status-msg ok';
+    setTimeout(() => location.reload(), 600);
+  }).catch(e => {
+    const c = e && e.code || '';
+    st.textContent = (c.includes('wrong-password') || c.includes('invalid-credential') || c.includes('invalid-login') || c.includes('user-not-found'))
+      ? 'Contraseña incorrecta.' : c.includes('network') ? 'Sin conexión: probá de nuevo con señal.' : 'No se pudo vincular: ' + (e.message || c);
+    st.className = 'status-msg err';
+  });
+}
+document.getElementById('btnVincular').addEventListener('click', vincular);
+document.getElementById('vincPass').addEventListener('keypress', e => { if (e.key === 'Enter') vincular(); });
+
 if (window.pdfjsLib) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
@@ -764,14 +826,15 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 const PERMISOS_POR_ROL = {
   carga: ['carga', 'revisar'],
   puerta: ['puerta', 'resumen'],
-  admin: ['carga', 'puerta', 'resumen', 'revisar', 'usuarios']
+  admin: ['carga', 'puerta', 'resumen', 'revisar', 'usuarios'],
+  calle: [] // solo App Calle
 };
 // Roles cuyo PIN autoriza un ingreso sin DNI (encargados: Manu/Simón son admin, Facu es carga).
 const ROLES_AUTORIZAN = ['admin', 'carga'];
 let sesion = null; // { id, nombre, rol }
 
 function etiquetaRol(rol) {
-  return rol === 'admin' ? 'Admin' : rol === 'carga' ? 'Carga' : 'Puerta';
+  return rol === 'admin' ? 'Admin' : rol === 'carga' ? 'Carga' : rol === 'calle' ? 'Calle' : 'Puerta';
 }
 
 function cargarSesionGuardada() {
@@ -802,6 +865,7 @@ function aplicarSesion() {
   document.getElementById('btnLogout').style.display = 'flex';
 
   const permitido = PERMISOS_POR_ROL[sesion.rol] || [];
+  if (!permitido.length) { mostrarLogin('Ese PIN es de la App Calle, no de la Puerta.'); return; }
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.style.display = permitido.includes(btn.dataset.view) ? 'flex' : 'none';
   });
@@ -816,6 +880,7 @@ function aplicarSesion() {
     if (primero === 'revisar') abrirRevisar();
   }
   migrarSiHaceFalta();
+  if (ROLES_AUTORIZAN.includes(sesion.rol)) purgarDniNochesCerradas();
 }
 
 function intentarLogin() {
@@ -837,6 +902,7 @@ function intentarLogin() {
       aplicarSesion();
     })
     .catch(e => {
+      if (esRechazoBase(e)) { statusEl.textContent = ''; mostrarVinculacion(true); return; }
       statusEl.textContent = 'Error: ' + e.message;
       statusEl.className = 'status-msg err';
     });
@@ -863,7 +929,7 @@ function bootstrapAdminSiHaceFalta() {
 }
 
 cargarSesionGuardada();
-bootstrapAdminSiHaceFalta().finally(() => {
+authListo.then(() => bootstrapAdminSiHaceFalta()).finally(() => {
   if (!sesion) { mostrarLogin(); return; }
   // revalidar que la sesión guardada siga activa (por si fue dada de baja)
   db.collection('usuarios').doc(sesion.id).get().then(doc => {
@@ -874,8 +940,44 @@ bootstrapAdminSiHaceFalta().finally(() => {
     } else {
       mostrarLogin('Tu acceso fue desactivado. Pedile a un admin que te dé de alta de nuevo.');
     }
-  }).catch(() => aplicarSesion()); // sin conexión: dejamos pasar con la sesión ya guardada
+  }).catch(e => {
+    if (esRechazoBase(e)) { mostrarLogin(); mostrarVinculacion(true); return; }
+    aplicarSesion(); // sin conexión: dejamos pasar con la sesión ya guardada
+  });
 });
+
+/* ---------- Números de DNI: se borran de las noches cerradas ---------- */
+// Durante la noche el número sirve para controlar y acreditar; después no hace falta y es el
+// dato más sensible que guarda la app. Se borra el número (invitados.dni.dni, intentos.dni y
+// el texto crudo del código); quedan nombre, edad, método y hora para resúmenes y comisiones.
+let purgaCorriendo = false;
+async function purgarDniNochesCerradas() {
+  if (purgaCorriendo || !eventoListo) return;
+  purgaCorriendo = true;
+  const DEL = firebase.firestore.FieldValue.delete();
+  try {
+    const evs = await db.collection('eventos').get();
+    for (const ev of evs.docs) {
+      if (ev.id === eventoId || ev.data().dniPurgado) continue;
+      const [inv, ints] = await Promise.all([
+        db.collection('invitados').where('eventoId', '==', ev.id).get(),
+        db.collection('intentos').where('eventoId', '==', ev.id).get()
+      ]);
+      const ops = [];
+      inv.docs.forEach(d => { const x = d.data(); if (x.dni && x.dni.dni) ops.push([d.ref, { 'dni.dni': DEL }]); });
+      ints.docs.forEach(d => { const x = d.data(); if (x.dni || x.crudo) ops.push([d.ref, { dni: DEL, crudo: DEL }]); });
+      for (let i = 0; i < ops.length; i += 400) {
+        const b = db.batch();
+        ops.slice(i, i + 400).forEach(([r, u]) => b.update(r, u));
+        await b.commit();
+      }
+      await db.collection('eventos').doc(ev.id).set({ dniPurgado: true, dniPurgadoEn: TS() }, { merge: true });
+      if (ops.length) registrarAuditoria('purga_dni', 'Borró ' + ops.length + ' número(s) de DNI de la noche ' + (ev.data().nombreEvento || ev.id));
+    }
+  } catch (e) {
+    console.warn('Purga de DNI: se reintenta la próxima vez.', e && e.code);
+  } finally { purgaCorriendo = false; }
+}
 
 /* ---------- Registro de auditoría ---------- */
 function registrarAuditoria(accion, detalle) {
@@ -1025,7 +1127,7 @@ function fechaCorta(iso) {
 const TS = () => firebase.firestore.FieldValue.serverTimestamp();
 
 let unsubEvento = null, unsubInvitados = null;
-db.collection('config').doc('activo').onSnapshot(doc => {
+authListo.then(() => db.collection('config').doc('activo').onSnapshot(doc => {
   const id = doc.exists ? (doc.data().eventoActivoId || null) : null;
   const primera = !eventoListo;
   eventoListo = true;
@@ -1033,7 +1135,8 @@ db.collection('config').doc('activo').onSnapshot(doc => {
   eventoId = id;
   modoNuevaNoche = false;
   suscribirNoche();
-});
+  if (sesion && ROLES_AUTORIZAN.includes(sesion.rol)) purgarDniNochesCerradas();
+}, e => { if (esRechazoBase(e)) mostrarVinculacion(true); }));
 
 function suscribirNoche() {
   if (unsubEvento) { unsubEvento(); unsubEvento = null; }

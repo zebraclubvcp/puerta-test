@@ -66,8 +66,8 @@ Motivo: la versión anterior (violeta / "Liquid Glass") se sentía genérica / h
 ## Backend — Firebase, proyecto "zebra-puerta"
 
 - Firestore Standard, región `southamerica-east1` (São Paulo).
-- Reglas: `allow read, write: if true;` — sin Firebase Auth real, el único gate es el PIN a nivel de interfaz.
-- **Restricción dura y repetida: ninguna sesión de Claude puede modificar las reglas de seguridad de Firestore, ni con autorización explícita de Manu.**
+- Reglas: hasta el 14/10/2026 `allow read, write: if true;`. Reglas nuevas en `firestore.rules`: solo la cuenta de Auth `equipo@zebraclub.app` (email/contraseña). Ver "Seguridad 14/10".
+- **Restricción dura: ninguna sesión de Claude publica ni modifica en vivo las reglas de seguridad de Firestore.** El 14/10/2026 Manu pidió que Claude *arme* las reglas nuevas (`firestore.rules` en este repo); las publica Manu a mano en la consola. Cualquier cambio futuro de reglas: se edita el archivo y lo publica Manu.
 - Config del SDK (pública, va en el código cliente tal cual):
 
 ```js
@@ -111,6 +111,15 @@ Pedido de Manu: muchas veces no hay un encargado cerca, así que el de puerta ti
 - El corte de horario de RRPP sigue aplicando.
 - Campo nuevo en `invitados`: `motivoSinDniTipo` (no_trajo|no_lee|otro). Los viejos se clasifican con `motivoSinDniDe()` por el texto.
 - Resumen: tarjeta "Entraron sin DNI" (por motivo, por quién los dejó pasar, cuántos con PIN de encargado); también va en el texto compartido y en `resumen.sinDniDetalle` al cerrar la noche.
+
+## Seguridad 14/10/2026 (revisión con la skill security-audit)
+
+Hallazgos: base abierta a cualquiera con la config pública (DNI, PINs, plata de Calle) y App Calle sin PIN.
+- **Vinculación de celular**: Firebase Auth email/contraseña, una cuenta compartida `equipo@zebraclub.app`. Cada celular se vincula una vez (queda guardado). Sin vincular: aviso ámbar mientras las reglas estén abiertas; si la base responde `permission-denied`, pantalla de vinculación obligatoria. Al vincular se recarga la página.
+- Arranque espera `authListo` (primer onAuthStateChanged) antes de tocar la base.
+- **Rol `calle`** en Usuarios ("Solo App Calle"): la Puerta lo rechaza; la App Calle acepta `admin` y `calle`.
+- **Purga de DNI**: `purgarDniNochesCerradas()` (corre con admin/carga) borra `invitados.dni.dni`, `intentos.dni` y `intentos.crudo` de toda noche que no sea la activa, y marca `eventos/{id}.dniPurgado`. Quedan nombre, edad, método.
+- El cargador de la Mac al Excel (pendiente) va a tener que iniciar sesión con la cuenta del equipo.
 
 ## Arquitectura actual vs. objetivo
 
