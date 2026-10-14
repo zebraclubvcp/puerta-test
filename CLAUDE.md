@@ -103,6 +103,15 @@ Diagnóstico con datos reales: 95 de 347 ingresos fueron "sin DNI" (salteaba eda
 - **Buscador**: por nombre del invitado o por RRPP ("davi" muestra la lista de Julieta Davi).
 - Pruebas: parser con DNI inventados de los 3 formatos + punta a punta con Firestore falso en memoria y cámara simulada (PDF417 y QR generados). No se probaron contra la base real.
 
+## Cambio 14/10/2026 — sin DNI sin encargado
+
+Pedido de Manu: muchas veces no hay un encargado cerca, así que el de puerta tiene que poder dejar entrar sin DNI él mismo, y que quede registrado para hacer el reporte.
+- "No tiene DNI encima" ahora pide **motivo** (3 botones): `no_trajo` (no trajo el DNI), `no_lee` (tiene DNI, la app no lo lee), `otro` (texto). **El PIN de encargado es opcional**: sin PIN queda a nombre del de puerta (`ingresadoPor`), con PIN se guarda también `autorizadoPor`.
+- `no_lee` en lista RRPP: obliga a tildar "Vi el DNI y es mayor de X" y sugiere cargarlo a mano (que sí controla la edad).
+- El corte de horario de RRPP sigue aplicando.
+- Campo nuevo en `invitados`: `motivoSinDniTipo` (no_trajo|no_lee|otro). Los viejos se clasifican con `motivoSinDniDe()` por el texto.
+- Resumen: tarjeta "Entraron sin DNI" (por motivo, por quién los dejó pasar, cuántos con PIN de encargado); también va en el texto compartido y en `resumen.sinDniDetalle` al cerrar la noche.
+
 ## Arquitectura actual vs. objetivo
 
 **Hoy**: un solo `index.html` con las 4 vistas, el login, el matching, el escaneo, Firestore y el service worker todos mezclados. Ese formato es la causa raíz de bugs como el de la "edad aleatoria": un cambio en una parte puede romper otra sin que se note hasta usarlo en vivo.

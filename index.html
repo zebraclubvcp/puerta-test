@@ -120,6 +120,11 @@
   .visor.leido .marco i { border-color: var(--ok); }
   .visor-hint { font-size: 12.5px; color: var(--ink2); text-align: center; margin-top: 6px; line-height: 1.4; }
   .manual-box { margin-top: 4px; }
+  .motivo-opts { display: grid; gap: 8px; margin-top: 6px; }
+  .motivo-opt { min-height: 52px; border-radius: 12px; border: 1px solid var(--edge); background: var(--field); color: var(--ink); font: inherit; font-size: 15px; text-align: left; padding: 0 16px; cursor: pointer; }
+  .motivo-opt.sel { border-color: var(--warn); background: var(--warnbg); color: var(--ink); }
+  .sindni-grid { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; font-size: 14px; }
+  .sindni-grid .n { font-family: 'Bebas Neue', 'Onest', sans-serif; font-size: 20px; text-align: right; }
   .manual-box .row input { text-align: center; }
   .metodo-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .metodo-row .badge { background: var(--press); color: var(--ink2); }
@@ -384,18 +389,21 @@ María López
         <div class="nueva-noche-links"><button type="button" class="btn-link" id="btnMostrarAutoriz">No tiene DNI encima</button></div>
       </div>
       <div id="autorizBox" class="manual-box" style="display:none;">
-        <div class="nueva-aviso">Sin DNI no se puede controlar la edad. Lo autoriza un encargado con su PIN y queda registrado.</div>
-        <label for="autorizMotivo">Motivo</label>
-        <select id="autorizMotivo">
-          <option value="">Elegí el motivo…</option>
-          <option value="Olvidó el DNI">Olvidó el DNI</option>
-          <option value="DNI dañado o ilegible">DNI dañado o ilegible</option>
-          <option value="otro">Otro</option>
-        </select>
+        <div class="nueva-aviso">Entra sin DNI. Queda registrado a tu nombre, con el motivo y la hora.</div>
+        <label>¿Por qué entra sin DNI?</label>
+        <div class="motivo-opts" id="motivoOpts">
+          <button type="button" class="motivo-opt" data-m="no_trajo">No trajo el DNI</button>
+          <button type="button" class="motivo-opt" data-m="no_lee">Tiene DNI, la app no lo lee</button>
+          <button type="button" class="motivo-opt" data-m="otro">Otro motivo</button>
+        </div>
         <input type="text" id="autorizOtro" placeholder="Contá el motivo" style="display:none;margin-top:8px;" autocomplete="off">
-        <label for="autorizPin">PIN del encargado</label>
+        <div id="noLeeBox" style="display:none;">
+          <div class="muted" style="text-align:left;margin-top:10px;">Si podés, mejor <button type="button" class="btn-link" id="btnIrAMano" style="display:inline;padding:0;">cargá el número y la fecha a mano</button>: así la app controla la edad.</div>
+          <div class="checkline" id="noLeeEdadLine"><input type="checkbox" id="chkNoLeeEdad"><label for="chkNoLeeEdad" style="margin:0;" id="noLeeEdadTxt">Vi el DNI y es mayor de edad</label></div>
+        </div>
+        <label for="autorizPin">PIN de encargado <span class="muted" style="font-weight:400;">(opcional, si hay uno cerca)</span></label>
         <input type="password" id="autorizPin" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="----" autocomplete="off">
-        <button class="btn-primary" id="btnAutorizar">Autorizar ingreso</button>
+        <button class="btn-primary" id="btnAutorizar">Entrar sin DNI</button>
         <div class="nueva-noche-links"><button type="button" class="btn-link" id="btnVolverDatos">Volver a cargar el DNI</button></div>
       </div>
       <div class="status-msg" id="manualStatus"></div>
@@ -419,6 +427,10 @@ María López
         <div class="l">Total ingresado</div>
       </div>
       <div class="metodo-row" id="metodoRow"></div>
+    </div>
+    <div class="card" id="sinDniCard" style="display:none;">
+      <h2>Entraron sin DNI</h2>
+      <div id="sinDniDetalle"></div>
     </div>
     <div class="card">
       <h2>Por RRPP / encargado / dueño</h2>
@@ -1159,6 +1171,20 @@ function contarMetodos(lista) {
   return c;
 }
 
+// Ingresos sin DNI: por motivo y por quién lo dejó pasar en la puerta.
+function detalleSinDni(lista) {
+  const sin = lista.filter(i => i.estado === 'ingresado' && metodoDe(i) === 'sin_datos');
+  const porMotivo = { no_trajo: 0, no_lee: 0, otro: 0 }, porPuerta = {};
+  let conEncargado = 0;
+  sin.forEach(i => {
+    porMotivo[motivoSinDniDe(i)]++;
+    const q = i.ingresadoPor || 'Sin dato';
+    porPuerta[q] = (porPuerta[q] || 0) + 1;
+    if (i.autorizadoPor) conEncargado++;
+  });
+  return { total: sin.length, porMotivo, porPuerta, conEncargado };
+}
+
 function armarResumen(lista) {
   const por = {};
   lista.forEach(i => {
@@ -1172,6 +1198,7 @@ function armarResumen(lista) {
     total: lista.filter(i => i.estado === 'ingresado').length,
     cargados: lista.length,
     sinDni: lista.filter(i => i.estado === 'ingresado' && i.sinDni).length,
+    sinDniDetalle: detalleSinDni(lista),
     porMetodo: contarMetodos(lista),
     porResponsable,
     calculadoEn: Date.now()
@@ -1613,12 +1640,26 @@ function escapeAttr(str) {
 /* ---------- Sincronización en vivo de invitados: ver suscribirNoche() ---------- */
 
 /* ---------- Resumen en vivo ---------- */
+function renderSinDni() {
+  const d = detalleSinDni(invitados);
+  const card = document.getElementById('sinDniCard');
+  if (!d.total) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const fila = (t, n) => `<span>${escapeHtml(t)}</span><span class="n">${n}</span>`;
+  let h = '<div class="sindni-grid">' + Object.keys(MOTIVO_SIN_DNI_TXT).filter(k => d.porMotivo[k]).map(k => fila(MOTIVO_SIN_DNI_TXT[k], d.porMotivo[k])).join('') + '</div>';
+  h += '<div class="muted" style="text-align:left;margin:14px 0 6px;">Quién los dejó pasar</div><div class="sindni-grid">' +
+    Object.entries(d.porPuerta).sort((a, b) => b[1] - a[1]).map(([q, n]) => fila(q, n)).join('') + '</div>';
+  if (d.conEncargado) h += `<div class="muted" style="text-align:left;margin-top:10px;">${d.conEncargado} con PIN de encargado</div>`;
+  document.getElementById('sinDniDetalle').innerHTML = h;
+}
+
 function renderResumen() {
   const ingresados = invitados.filter(i => i.estado === 'ingresado');
   document.getElementById('totalIngresado').textContent = ingresados.length;
   const met = contarMetodos(invitados);
   document.getElementById('metodoRow').innerHTML = Object.keys(METODO_TXT).filter(k => met[k])
     .map(k => `<span class="badge">${METODO_TXT[k]} ${met[k]}</span>`).join('');
+  renderSinDni();
   const cont = document.getElementById('resumenPorResponsable');
   if (!ingresados.length) {
     cont.innerHTML = '<div class="muted">Todavía no hay ingresos.</div>';
@@ -1667,6 +1708,12 @@ function generarTextoResumen() {
   const met = contarMetodos(invitados);
   const det = Object.keys(METODO_TXT).filter(k => met[k]).map(k => METODO_TXT[k] + ' ' + met[k]);
   if (det.length) txt += '\n(' + det.join(' · ') + ')';
+  const sd = detalleSinDni(invitados);
+  if (sd.total) {
+    txt += '\n\nSin DNI: ' + sd.total;
+    Object.keys(MOTIVO_SIN_DNI_TXT).filter(k => sd.porMotivo[k]).forEach(k => { txt += '\n- ' + MOTIVO_SIN_DNI_TXT[k] + ': ' + sd.porMotivo[k]; });
+    txt += '\nLos dejó pasar: ' + Object.entries(sd.porPuerta).sort((a, b) => b[1] - a[1]).map(([q, n]) => q + ' ' + n).join(', ');
+  }
   return txt;
 }
 
@@ -1850,9 +1897,19 @@ function setScanStatus(txt, clase) {
 
 /* ---------- DNI a mano (reemplaza "Ingresar sin DNI") ---------- */
 // La puerta escribe número y fecha de nacimiento: la app controla edad y horario igual que
-// con el escaneo. Si la persona no tiene DNI encima, solo entra con el PIN de un encargado y
-// un motivo (antes "sin DNI" salteaba todos los controles: 95 de 347 ingresos el 10/10).
+// con el escaneo. Si no hay forma de usar el DNI, el de puerta lo deja entrar eligiendo el motivo
+// (no lo trajo / la app no lo lee / otro); queda a su nombre y sale en el Resumen. PIN de encargado opcional.
 let manualInv = null;
+let motivoSel = null; // no_trajo | no_lee | otro
+const MOTIVO_SIN_DNI_TXT = { no_trajo: 'No trajo el DNI', no_lee: 'La app no lee el DNI', otro: 'Otro motivo' };
+// Ingresos viejos (antes del 14/10) guardaban solo el texto del motivo.
+function motivoSinDniDe(i) {
+  if (i.motivoSinDniTipo) return i.motivoSinDniTipo;
+  const t = (i.motivoSinDni || '').toLowerCase();
+  if (t.includes('olvid') || t.includes('no trajo')) return 'no_trajo';
+  if (t.includes('ilegible') || t.includes('dañado') || t.includes('no lee')) return 'no_lee';
+  return 'otro';
+}
 
 function abrirManual(inv) {
   detenerEscaneo();
@@ -1862,8 +1919,11 @@ function abrirManual(inv) {
   document.getElementById('candidatoCard').style.display = 'none';
   document.getElementById('manualPara').innerHTML = 'Para: <strong>' + escapeHtml(inv.nombreCompleto) + '</strong> · ' + escapeHtml(inv.responsable) + ` <span class="tag ${tagClase(inv.tipo)}">${tagTexto(inv.tipo)}</span>`;
   ['manualDni', 'manualDia', 'manualMes', 'manualAnio', 'autorizPin', 'autorizOtro'].forEach(id => { document.getElementById(id).value = ''; });
-  document.getElementById('autorizMotivo').value = '';
+  motivoSel = null;
+  document.querySelectorAll('.motivo-opt').forEach(b => b.classList.remove('sel'));
   document.getElementById('autorizOtro').style.display = 'none';
+  document.getElementById('noLeeBox').style.display = 'none';
+  document.getElementById('chkNoLeeEdad').checked = false;
   document.getElementById('manualDatosBox').style.display = '';
   document.getElementById('autorizBox').style.display = 'none';
   document.getElementById('manualStatus').textContent = '';
@@ -1914,39 +1974,62 @@ document.getElementById('btnVolverDatos').addEventListener('click', () => {
   document.getElementById('manualDatosBox').style.display = '';
   document.getElementById('manualStatus').textContent = '';
 });
-document.getElementById('autorizMotivo').addEventListener('change', e => {
-  document.getElementById('autorizOtro').style.display = e.target.value === 'otro' ? '' : 'none';
+document.getElementById('motivoOpts').addEventListener('click', e => {
+  const b = e.target.closest('.motivo-opt');
+  if (!b) return;
+  motivoSel = b.dataset.m;
+  document.querySelectorAll('.motivo-opt').forEach(x => x.classList.toggle('sel', x === b));
+  document.getElementById('autorizOtro').style.display = motivoSel === 'otro' ? '' : 'none';
+  const noLee = motivoSel === 'no_lee';
+  document.getElementById('noLeeBox').style.display = noLee ? '' : 'none';
+  // la edad mínima solo aplica a listas de RRPP
+  const esRrpp = manualInv && manualInv.tipo === 'rrpp';
+  document.getElementById('noLeeEdadLine').style.display = esRrpp ? '' : 'none';
+  document.getElementById('noLeeEdadTxt').textContent = 'Vi el DNI y es mayor de ' + (evento.edadMinima || EDAD_MINIMA_DEFECTO) + ' años';
+  document.getElementById('manualStatus').textContent = '';
+  if (motivoSel === 'otro') setTimeout(() => document.getElementById('autorizOtro').focus(), 50);
 });
+document.getElementById('btnIrAMano').addEventListener('click', () => document.getElementById('btnVolverDatos').click());
 document.getElementById('btnManualCancelar').addEventListener('click', () => {
   if (manualInv) registrarIntento('cancelado', { invitado: manualInv, metodo: 'manual', detalle: 'Canceló la carga a mano' });
   cerrarManual();
 });
 
 document.getElementById('btnAutorizar').addEventListener('click', () => {
+  // El de puerta puede dejar entrar sin DNI aunque no haya un encargado cerca: queda a su nombre
+  // con el motivo. Si hay un encargado y pone su PIN, queda también como autorizado por él.
   const inv = manualInv;
   if (!inv) return;
-  let motivo = document.getElementById('autorizMotivo').value;
-  if (motivo === 'otro') motivo = document.getElementById('autorizOtro').value.trim();
+  if (!motivoSel) { manualError('Elegí por qué entra sin DNI.'); return; }
+  let motivo = MOTIVO_SIN_DNI_TXT[motivoSel];
+  if (motivoSel === 'otro') {
+    motivo = document.getElementById('autorizOtro').value.trim();
+    if (!motivo) { manualError('Contá el motivo.'); return; }
+  }
+  if (motivoSel === 'no_lee' && inv.tipo === 'rrpp' && !document.getElementById('chkNoLeeEdad').checked) {
+    manualError('Mirá el DNI y confirmá la edad, o cargalo a mano.'); return;
+  }
   const pin = document.getElementById('autorizPin').value.trim();
-  if (!motivo) { manualError('Elegí el motivo.'); return; }
-  if (!/^\d{4}$/.test(pin)) { manualError('Falta el PIN del encargado (4 números).'); return; }
-  // el corte de las listas de RRPP vale también sin DNI (antes este camino lo salteaba)
+  if (pin && !/^\d{4}$/.test(pin)) { manualError('El PIN son 4 números (o dejalo vacío).'); return; }
+  // el corte de las listas de RRPP vale también sin DNI
   if (inv.tipo === 'rrpp' && excedeHorario(evento.horaCorte)) {
     manualError('Pasó el corte (' + (evento.horaCorte || '--:--') + '): las listas de RRPP ya no valen.');
     registrarIntento('fuera_horario', { invitado: inv, metodo: 'sin_datos', detalle: 'Sin DNI, después del corte' });
     return;
   }
+  const extra = { metodo: 'sin_datos', edad: null, dni: null, motivo, motivoTipo: motivoSel, autorizadoPor: null };
+  if (!pin) { cerrarManual(); confirmarIngreso(inv, extra); return; }
   const btn = document.getElementById('btnAutorizar');
   btn.disabled = true;
   db.collection('usuarios').where('pin', '==', pin).where('activo', '==', true).limit(1).get()
     .then(snap => {
       btn.disabled = false;
       const u = snap.empty ? null : snap.docs[0].data();
-      if (!u || !ROLES_AUTORIZAN.includes(u.rol)) { manualError('Ese PIN no puede autorizar. Tiene que ser de un encargado.'); return; }
+      if (!u || !ROLES_AUTORIZAN.includes(u.rol)) { manualError('Ese PIN no es de un encargado. Borralo para entrar igual sin PIN.'); return; }
       cerrarManual();
-      confirmarIngreso(inv, { metodo: 'sin_datos', edad: null, dni: null, autorizadoPor: u.nombre, motivo });
+      confirmarIngreso(inv, { ...extra, autorizadoPor: u.nombre });
     })
-    .catch(e => { btn.disabled = false; manualError('No se pudo verificar el PIN: ' + e.message); });
+    .catch(e => { btn.disabled = false; manualError('No se pudo verificar el PIN: ' + e.message + '. Borralo para entrar igual.'); });
 });
 
 /* ---------- Escaneo DNI: visor fino con marco, lee solo dentro del marco ---------- */
@@ -2314,20 +2397,20 @@ function confirmarIngreso(invitado, x) {
     sinDni: sinDatos,
     metodo: x.metodo || 'escaneo'
   };
-  if (sinDatos) { datos.autorizadoPor = x.autorizadoPor; datos.motivoSinDni = x.motivo; }
+  if (sinDatos) { datos.autorizadoPor = x.autorizadoPor || null; datos.motivoSinDni = x.motivo; datos.motivoSinDniTipo = x.motivoTipo || null; }
   preseleccion = null;
   document.getElementById('candidatoCard').style.display = 'none';
   setScanStatus('');
   db.collection('invitados').doc(invitado.id).update(datos).then(() => {
     const det = sinDatos
-      ? 'Confirmó ingreso SIN DNI de ' + invitado.nombreCompleto + ' (autorizó ' + x.autorizadoPor + ': ' + x.motivo + ')'
+      ? 'Confirmó ingreso SIN DNI de ' + invitado.nombreCompleto + ' (' + x.motivo + (x.autorizadoPor ? '; autorizó ' + x.autorizadoPor : '; sin encargado') + ')'
       : 'Confirmó el ingreso de ' + invitado.nombreCompleto + (x.metodo === 'manual' ? ' (DNI a mano)' : '');
     registrarAuditoria(sinDatos ? 'ingreso_sin_dni' : 'confirmar_ingreso', det);
   }).catch(e => {
     setScanStatus('❌ NO se guardó el ingreso de ' + invitado.nombreCompleto + ' (' + e.message + '). Quedó en Revisar para acreditarlo.', 'err');
     registrarIntento('error_guardado', { invitado, dni: x.dni, edad: x.edad, metodo: x.metodo, detalle: e.message });
   });
-  showToast(sinDatos ? '⚠️ Ingreso sin DNI autorizado: ' + invitado.nombreCompleto : '✅ Ingreso confirmado: ' + invitado.nombreCompleto);
+  showToast(sinDatos ? '⚠️ Entró sin DNI (registrado): ' + invitado.nombreCompleto : '✅ Ingreso confirmado: ' + invitado.nombreCompleto);
 }
 
 /* ---------- Revisar: rechazos y errores para acreditar después ---------- */
