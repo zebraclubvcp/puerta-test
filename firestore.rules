@@ -1,19 +1,23 @@
 rules_version = '2';
-
-// Zebra Club · base "zebra-puerta" (App Puerta + App Calle)
-// Solo entra la cuenta del equipo (equipo@zebraclub.app), con la que se vincula cada celular.
-// Todo lo demás (alguien que solo tiene el link o la configuración pública) queda afuera.
 service cloud.firestore {
   match /databases/{database}/documents {
-
     function esEquipo() {
       return request.auth != null
         && request.auth.token.firebase.sign_in_provider == 'password'
         && request.auth.token.email == 'equipo@zebraclub.app';
     }
-
     match /{document=**} {
       allow read, write: if esEquipo();
+    }
+    // VIP 360 (Halloween 31/10/2026): la pantallita pública vip.html solo puede CREAR su confirmación.
+    // No puede leer, editar ni borrar nada. Publicado a mano por Manu el 29/10/2026.
+    match /vip360_confirm/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['tel', 'nombre', 'apellido', 'dni', 'creadoEn'])
+        && request.resource.data.tel is string && request.resource.data.tel.size() <= 30
+        && request.resource.data.nombre is string && request.resource.data.nombre.size() <= 60
+        && request.resource.data.apellido is string && request.resource.data.apellido.size() <= 60
+        && request.resource.data.dni is string && request.resource.data.dni.matches('^[0-9]{7,8}$')
+        && request.resource.data.creadoEn == request.time;
     }
   }
 }

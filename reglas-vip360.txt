@@ -1,0 +1,21 @@
+// Pegar DENTRO de:  match /databases/{database}/documents { ... }
+// junto a las reglas que ya tenés (no borres nada de lo que hay).
+
+    // VIP 360 · la pantallita pública (vip.html) solo puede CREAR una confirmación,
+    // con estos campos y un DNI de 7 u 8 números. No puede leer, editar ni borrar nada.
+    match /vip360_confirm/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['tel', 'nombre', 'apellido', 'dni', 'creadoEn'])
+        && request.resource.data.tel is string && request.resource.data.tel.size() <= 30
+        && request.resource.data.nombre is string && request.resource.data.nombre.size() <= 60
+        && request.resource.data.apellido is string && request.resource.data.apellido.size() <= 60
+        && request.resource.data.dni is string && request.resource.data.dni.matches('^[0-9]{7,8}$')
+        && request.resource.data.creadoEn == request.time;
+      allow read, update, delete: if request.auth != null && request.auth.token.email == 'equipo@zebraclub.app';
+    }
+    // VIP 360 · anotados del form e ingresos al VIP: solo la cuenta del equipo (los celulares vinculados).
+    match /vip360/{id} {
+      allow read, write: if request.auth != null && request.auth.token.email == 'equipo@zebraclub.app';
+    }
+    match /vip360_ingresos/{id} {
+      allow read, write: if request.auth != null && request.auth.token.email == 'equipo@zebraclub.app';
+    }
