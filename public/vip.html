@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VIP 360 · Zebra Club</title>
+<meta name="theme-color" content="#111111">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #111111; --surf: #1B1B1B; --field: #141414; --line: #2A2A2A; --edge: #3A3A3A;
+    --ink: #EDEDED; --ink2: #9C9C97; --ink3: #6E6E6A;
+    --ok: #7FBF8F; --okbg: rgba(127,191,143,.14); --bad: #E5847C; --orange: #F08A3C;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: Onest, -apple-system, system-ui, sans-serif; }
+  body { min-height: 100vh; padding: calc(24px + env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom)); }
+  main { max-width: 440px; margin: 0 auto; }
+  .marca { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; letter-spacing: -.01em; }
+  .marca i { width: 26px; height: 26px; border-radius: 7px; background: repeating-linear-gradient(135deg, var(--ink) 0 4px, var(--bg) 4px 8px); box-shadow: inset 0 0 0 1.5px var(--ink); }
+  h1 { font-size: 34px; line-height: 1.02; letter-spacing: -.035em; margin: 28px 0 10px; font-weight: 800; }
+  h1 span { color: var(--orange); }
+  .sub { color: var(--ink2); font-size: 15px; line-height: 1.5; margin: 0 0 22px; }
+  .card { background: var(--surf); border-radius: 18px; padding: 18px; }
+  label { display: block; font-size: 13px; color: var(--ink2); margin: 14px 0 6px; font-weight: 500; }
+  label:first-child { margin-top: 0; }
+  input { width: 100%; min-height: 52px; padding: 12px 14px; border: 1px solid var(--edge); border-radius: 12px; font: inherit; font-size: 17px; background: var(--field); color: var(--ink); -webkit-appearance: none; appearance: none; }
+  input:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px rgba(237,237,237,.12); }
+  input::placeholder { color: var(--ink3); }
+  .row { display: flex; gap: 10px; } .row > div { flex: 1; min-width: 0; }
+  .ayuda { font-size: 12.5px; color: var(--ink3); margin-top: 6px; }
+  button { width: 100%; min-height: 56px; margin-top: 20px; border: 0; border-radius: 14px; background: var(--ink); color: var(--bg); font: inherit; font-size: 17px; font-weight: 700; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .err { color: var(--bad); font-size: 14px; margin-top: 12px; min-height: 18px; }
+  .legal { font-size: 12px; color: var(--ink3); line-height: 1.5; margin-top: 18px; }
+  .listo { text-align: center; padding: 30px 8px; }
+  .listo .tilde { width: 72px; height: 72px; border-radius: 50%; background: var(--okbg); color: var(--ok); display: grid; place-items: center; margin: 0 auto 18px; font-size: 38px; font-weight: 700; }
+  .listo h2 { font-size: 26px; margin: 0 0 8px; letter-spacing: -.02em; }
+  .listo p { color: var(--ink2); margin: 0; line-height: 1.5; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="marca"><i aria-hidden="true"></i>Zebra Club</div>
+  <section id="paso1">
+    <h1>Confirmá tu lugar en el <span>VIP 360</span></h1>
+    <p class="sub">Halloween · sábado 31/10. Completá tus datos tal cual figuran en tu DNI: en la puerta te escaneamos el DNI y te encontramos al toque.</p>
+    <form class="card" id="form" novalidate>
+      <label for="tel">Tu WhatsApp (el mismo que pusiste al anotarte)</label>
+      <input id="tel" type="tel" inputmode="tel" autocomplete="tel" placeholder="Ej: 3541 123456" required>
+      <div class="row">
+        <div><label for="nombre">Nombre</label><input id="nombre" autocomplete="given-name" required></div>
+        <div><label for="apellido">Apellido</label><input id="apellido" autocomplete="family-name" required></div>
+      </div>
+      <label for="dni">DNI</label>
+      <input id="dni" inputmode="numeric" maxlength="10" placeholder="Sin puntos" required>
+      <div class="ayuda">Solo lo usamos para controlar el ingreso de esa noche y después se borra.</div>
+      <button type="submit" id="btn">Confirmar</button>
+      <div class="err" id="err" role="alert"></div>
+    </form>
+    <p class="legal">Confirmar no reemplaza tu entrada: para entrar a Zebra Club necesitás entrada o estar en lista. El VIP 360 es para mayores de 18 y disfrazados.</p>
+  </section>
+  <section id="paso2" class="listo" hidden>
+    <div class="tilde">✓</div>
+    <h2>¡Listo, <span id="nomOk"></span>!</h2>
+    <p>Quedaste confirmado para el VIP 360. El sábado traé tu DNI y tu disfraz. 🎃</p>
+  </section>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script>
+firebase.initializeApp({
+  apiKey: "AIzaSyDYjdQw1YS2fGOb5EmwNSk8X-mGOtlUduQ",
+  authDomain: "zebra-puerta.firebaseapp.com",
+  projectId: "zebra-puerta",
+  storageBucket: "zebra-puerta.firebasestorage.app",
+  messagingSenderId: "953302953272",
+  appId: "1:953302953272:web:ffea2258d872b34a6d25cd"
+});
+const db = firebase.firestore();
+const $ = (id) => document.getElementById(id);
+$('dni').addEventListener('input', (e) => { e.target.value = e.target.value.replace(/\D/g, ''); });
+const limpiar = (s) => s.trim().replace(/\s+/g, ' ').slice(0, 60);
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const tel = $('tel').value.trim(), dig = tel.replace(/\D/g, '');
+  const nombre = limpiar($('nombre').value), apellido = limpiar($('apellido').value), dni = $('dni').value;
+  const err = $('err'); err.textContent = '';
+  if (dig.length < 8 || dig.length > 15) { err.textContent = 'Revisá tu WhatsApp (con característica).'; $('tel').focus(); return; }
+  if (!nombre) { err.textContent = 'Poné tu nombre.'; $('nombre').focus(); return; }
+  if (!apellido) { err.textContent = 'Poné tu apellido.'; $('apellido').focus(); return; }
+  if (!/^\d{7,8}$/.test(dni)) { err.textContent = 'El DNI son 7 u 8 números, sin puntos.'; $('dni').focus(); return; }
+  $('btn').disabled = true; $('btn').textContent = 'Enviando…';
+  try {
+    await db.collection('vip360_confirm').add({ tel: tel.slice(0, 30), nombre, apellido, dni, creadoEn: firebase.firestore.FieldValue.serverTimestamp() });
+    $('nomOk').textContent = nombre.split(' ')[0];
+    $('paso1').hidden = true; $('paso2').hidden = false; window.scrollTo(0, 0);
+  } catch (x) {
+    err.textContent = 'No se pudo enviar. Revisá tu conexión y probá de nuevo.';
+    $('btn').disabled = false; $('btn').textContent = 'Confirmar';
+  }
+});
+</script>
+</body>
+</html>
