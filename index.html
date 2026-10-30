@@ -189,6 +189,17 @@
   .vip-nota { font-size: 12.5px; color: var(--ink2); margin-top: 8px; line-height: 1.4; }
   .vip-link { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
   .vip-link input { flex: 1; min-height: 40px; font-size: 13px; }
+  .env-item { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .env-item .n { font-size: 13px; color: var(--ink3); font-variant-numeric: tabular-nums; }
+  .env-item .t { min-width: 0; }
+  .env-item .t b { display: block; font-variant-numeric: tabular-nums; }
+  .env-item .t small { display: block; color: var(--ink2); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .env-item a { display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; border-radius: 10px; background: var(--okbg); color: var(--ok); font-weight: 600; font-size: 14px; text-decoration: none; }
+  .env-item.hecho { opacity: .5; }
+  .env-item.hecho a { background: none; color: var(--ink2); border: 1px solid var(--edge); }
+  .env-bar { height: 6px; border-radius: 999px; background: var(--field); overflow: hidden; margin-top: 10px; }
+  .env-bar i { display: block; height: 100%; width: 0; background: var(--ok); }
+
 
 
   .list-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 44px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14.5px; }
@@ -505,6 +516,29 @@ María López
       <div id="vipSinMatch"></div>
       <button class="btn-link" id="btnVipBorrar" style="margin-top:10px;">Borrar los DNI del VIP (después de la noche)</button>
       <div class="status-msg" id="vipBorrarStatus"></div>
+    </div>
+    <div class="card" id="vipEnvioCard" style="display:none;">
+      <h2>Enviar mensaje a anotados</h2>
+      <div class="muted" style="text-align:left;">Tocás "Enviar", se abre WhatsApp con el mensaje listo y le das enviar. Queda marcado para todos los celulares, así nadie le escribe dos veces a la misma persona.</div>
+      <div class="vip-stats">
+        <div><b id="envN">0</b><span>enviados</span></div>
+        <div><b id="envFaltan">0</b><span>faltan</span></div>
+        <div><b id="envParte">0</b><span>en tu parte</span></div>
+      </div>
+      <div class="env-bar"><i id="envBarra"></i></div>
+      <label for="vipMsj">Mensaje (es el mismo para todos los que envían)</label>
+      <textarea id="vipMsj" style="min-height:160px;"></textarea>
+      <div class="status-msg" id="vipMsjStatus"></div>
+      <div class="row">
+        <div><label for="envCuantos">Somos tantos enviando</label><select id="envCuantos"><option value="1">Solo yo</option><option value="2">2 personas</option><option value="3">3 personas</option><option value="4">4 personas</option></select></div>
+        <div><label for="envYo">Yo mando la parte</label><select id="envYo"></select></div>
+      </div>
+      <div class="vip-nota" style="color:var(--warn)">Andá tranqui: uno cada 10 a 20 segundos. Si mandás muy rápido a gente que no te tiene agendado, WhatsApp puede frenar el número.</div>
+      <div class="filtro-row" style="margin-top:10px;">
+        <button type="button" class="on" id="envFPend">Faltan</button>
+        <button type="button" id="envFTodos">Todos</button>
+      </div>
+      <div id="envLista"></div>
     </div>
   </div>
 
@@ -2981,12 +3015,15 @@ function pintarVipStats() {
   document.getElementById('vipNAnotados').textContent = vipAnotados.length;
   document.getElementById('vipNConfirmados').textContent = personas.filter(p => p.conf).length;
   document.getElementById('vipNAdentro').textContent = vipIngresos.length;
+  pintarEnvio();
   const sin = personas.filter(p => p.conf && !p.enForm);
   const box = document.getElementById('vipSinMatch');
   if (box) box.innerHTML = sin.length && vipAnotados.length ? `<div class="vip-nota">Confirmaron pero su WhatsApp no está en el form (${sin.length}): ${sin.slice(0, 15).map(p => escapeHtml(nombreVip(p) + ' ' + (p.tel || ''))).join(', ')}${sin.length > 15 ? '…' : ''}. Igual figuran como anotados.</div>` : '';
 }
 function iniciarVip() {
   if (sesion && sesion.rol === 'admin') document.getElementById('vipAdminCard').style.display = '';
+  document.getElementById('vipEnvioCard').style.display = '';
+  envOpciones();
   document.getElementById('vipLinkTxt').value = VIP_LINK;
   if (vipIniciado) return;
   vipIniciado = true;
@@ -2995,6 +3032,7 @@ function iniciarVip() {
     db.collection('vip360').onSnapshot(s => { vipAnotados = s.docs.map(d => ({ id: d.id, ...d.data() })); pintarVipStats(); }, err);
     db.collection('vip360_confirm').onSnapshot(s => { vipConfirms = s.docs.map(d => { const x = d.data(); return { id: d.id, ...x, ts: x.creadoEn && x.creadoEn.toMillis ? x.creadoEn.toMillis() : 0 }; }); pintarVipStats(); }, err);
     db.collection('vip360_ingresos').onSnapshot(s => { vipIngresos = s.docs.map(d => ({ id: d.id, ...d.data() })); pintarVipStats(); }, err);
+    db.collection('config').doc('vip360').onSnapshot(d => { vipMsj = d.exists && typeof d.data().mensaje === 'string' ? d.data().mensaje : null; pintarEnvio(); }, err);
   });
 }
 document.getElementById('btnVipCopiar').addEventListener('click', () => {
@@ -3041,6 +3079,82 @@ document.getElementById('vipCsv').addEventListener('change', async e => {
     registrarAuditoria('vip360_csv', 'Cargó ' + arr.length + ' anotados del form VIP 360');
   } catch (er) { st.textContent = 'No se pudo cargar: ' + er.message; st.className = 'status-msg err'; }
 });
+
+/* ---------- Envío del mensaje a los anotados (WhatsApp uno por uno, estado compartido) ---------- */
+const VIP_MSJ_DEF = `WELCOME TO THE VIP 360 🎃
+
+Si te anotaste, es porque estás dispuesto a ir un poco más allá. Pero ojo, no cualquiera entra al VIP 360. 💀
+
+A partir de las 00:30 hs abrimos las puertas para que arranque el ritual, con horario límite de ingreso 2:00 am. Vas a ingresar por el portón del parking (CALLE ARRUABARRENA) y caminar por una alfombra roja hasta llegar a nuestro jurado: un equipo de 3 personajes que va a evaluar tu disfraz y decidir si cumplís con las condiciones para entrar al VIP 360.
+
+¿Estás a la altura? Si tu disfraz pasa la prueba, te habilitamos el acceso al patio del BAR, para escabiar gratis, bailar y vivir la experiencia completa. 🕷️
+
+⚠️ IMPORTANTE: anotarte al VIP 360 NO incluye la entrada a Zebra Club. Para entrar al boliche necesitás tu entrada (Alpogo o física) o estar en la lista de un RP.
+
+👉 PASO OBLIGATORIO: confirmá tu lugar con tu nombre y DNI acá (te lleva 20 segundos):
+https://zebraclubvcp.github.io/puerta-test/vip.html
+En la puerta escaneamos tu DNI, así que traelo sí o sí.
+
+Recordá: el disfraz es obligatorio, el jurado tiene la última palabra y solamente hay 200 cupos disponibles. Solo mayores de 18.
+
+Nos vemos del otro lado. 🖤`;
+let vipMsj = null, envSoloPend = true, envMsjTimer = null;
+const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+function telLindo(k) { return k.length === 10 ? k.slice(0, 4) + ' ' + k.slice(4, 7) + '-' + k.slice(7) : k; }
+function envOpciones() {
+  const c = lsGet('vipEnvCuantos', 1), yo = lsGet('vipEnvYo', 1);
+  document.getElementById('envCuantos').value = String(c);
+  document.getElementById('envYo').innerHTML = Array.from({ length: c }, (_, i) => `<option value="${i + 1}">${c === 1 ? 'Todos' : 'Parte ' + (i + 1)}</option>`).join('');
+  document.getElementById('envYo').value = String(Math.min(yo, c));
+}
+function pintarEnvio() {
+  const card = document.getElementById('vipEnvioCard');
+  if (!card || card.style.display === 'none') return;
+  const ta = document.getElementById('vipMsj');
+  if (document.activeElement !== ta) ta.value = vipMsj === null ? VIP_MSJ_DEF : vipMsj;
+  const todos = vipAnotados.slice().sort((a, b) => String(a.marca || '').localeCompare(String(b.marca || '')) || a.id.localeCompare(b.id));
+  const c = Number(document.getElementById('envCuantos').value) || 1, yo = Number(document.getElementById('envYo').value) || 1;
+  const tam = Math.ceil(todos.length / c) || 0;
+  const parte = todos.slice((yo - 1) * tam, yo * tam).map((x, i) => ({ ...x, pos: (yo - 1) * tam + i + 1 }));
+  const nEnv = todos.filter(x => x.enviadoEn).length;
+  document.getElementById('envN').textContent = nEnv;
+  document.getElementById('envFaltan').textContent = todos.length - nEnv;
+  document.getElementById('envParte').textContent = parte.length;
+  document.getElementById('envBarra').style.width = todos.length ? (nEnv / todos.length * 100) + '%' : '0';
+  const ver = envSoloPend ? parte.filter(x => !x.enviadoEn) : parte;
+  const texto = encodeURIComponent(ta.value);
+  const box = document.getElementById('envLista');
+  if (!todos.length) { box.innerHTML = '<div class="muted" style="margin-top:10px;">Primero cargá el CSV del form en "Datos del VIP".</div>'; return; }
+  box.innerHTML = ver.length ? ver.map(x => {
+    const ok = x.id.length === 10;
+    return `<div class="env-item${x.enviadoEn ? ' hecho' : ''}"><span class="n">${x.pos}</span><div class="t"><b>${escapeHtml(telLindo(x.id))}</b><small>${escapeHtml(x.disfraz || 'sin disfraz')}${x.enviadoEn ? ' · le escribió ' + escapeHtml(x.enviadoPor || '') + ' ' + horaCorta(x.enviadoEn) : ''}${ok ? '' : ' · ⚠️ número raro, revisalo'}</small></div>` +
+      `<a href="https://wa.me/549${x.id}?text=${texto}" target="_blank" rel="noopener" data-env="${x.id}">${x.enviadoEn ? 'Reenviar' : 'Enviar'}</a></div>`;
+  }).join('') : `<div class="muted" style="margin-top:10px;">${envSoloPend ? 'Listo: no queda nadie en tu parte. 🖤' : 'No hay nadie en esta parte.'}</div>`;
+}
+document.getElementById('envLista').addEventListener('click', e => {
+  const a = e.target.closest('a[data-env]'); if (!a) return;
+  const id = a.dataset.env;
+  const loc = vipAnotados.find(x => x.id === id);
+  if (loc && !loc.enviadoEn) { loc.enviadoEn = Date.now(); loc.enviadoPor = sesion ? sesion.nombre : ''; }
+  db.collection('vip360').doc(id).set({ enviadoEn: Date.now(), enviadoPor: sesion ? sesion.nombre : null }, { merge: true }).catch(er => showToast('No se marcó como enviado: ' + er.message));
+  setTimeout(pintarEnvio, 400);
+});
+document.getElementById('envCuantos').addEventListener('change', () => { lsSet('vipEnvCuantos', Number(document.getElementById('envCuantos').value)); lsSet('vipEnvYo', 1); envOpciones(); pintarEnvio(); });
+document.getElementById('envYo').addEventListener('change', () => { lsSet('vipEnvYo', Number(document.getElementById('envYo').value)); pintarEnvio(); });
+document.getElementById('envFPend').addEventListener('click', () => { envSoloPend = true; document.getElementById('envFPend').classList.add('on'); document.getElementById('envFTodos').classList.remove('on'); pintarEnvio(); });
+document.getElementById('envFTodos').addEventListener('click', () => { envSoloPend = false; document.getElementById('envFTodos').classList.add('on'); document.getElementById('envFPend').classList.remove('on'); pintarEnvio(); });
+document.getElementById('vipMsj').addEventListener('input', () => {
+  clearTimeout(envMsjTimer);
+  const st = document.getElementById('vipMsjStatus'); st.textContent = 'Guardando…'; st.className = 'status-msg';
+  envMsjTimer = setTimeout(() => {
+    const v = document.getElementById('vipMsj').value;
+    db.collection('config').doc('vip360').set({ mensaje: v, editadoPor: sesion ? sesion.nombre : null, editadoEn: Date.now() }, { merge: true })
+      .then(() => { st.textContent = 'Mensaje guardado para todos.'; st.className = 'status-msg ok'; pintarEnvio(); })
+      .catch(er => { st.textContent = 'No se guardó: ' + er.message; st.className = 'status-msg err'; });
+  }, 900);
+});
+document.getElementById('vipMsj').addEventListener('blur', pintarEnvio);
 
 /* ---------- borrar DNIs después de la noche (doble confirmación) ---------- */
 let vipBorrarArmado = 0;
